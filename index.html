@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Daily Five — Standings</title>
+<title>NYT Competition — Standings</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,500;0,600;0,700;1,500&family=Roboto+Mono:wght@400;500;700&display=swap');
 
@@ -157,6 +157,25 @@
     text-align:center;
   }
 
+  .trophy-row{
+    display:grid;
+    grid-template-columns:1fr auto;
+    align-items:baseline;
+    gap:12px;
+    padding:11px 4px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  .trophy-row:first-child{border-top:1px solid var(--paper-line);}
+  .trophy-name{font-size:17px; font-weight:600;}
+  .trophy-count{
+    font-family:'Roboto Mono', monospace;
+    font-size:14px;
+    font-weight:700;
+    color:var(--gold);
+    white-space:nowrap;
+  }
+  .trophy-count.zero{color:var(--ink-soft); font-weight:400;}
+
   /* Entry form */
   .entry{
     margin-top:34px;
@@ -240,7 +259,7 @@
     font-size:10px;
     padding:4px 8px;
   }
-  .add-row{display:flex; justify-content:flex-end; margin-top:14px;}
+  .add-row{display:flex; justify-content:flex-end; gap:10px; margin-top:14px;}
   .calc-result{
     margin-top:14px;
     border-top:1px solid var(--paper-line);
@@ -335,7 +354,7 @@
 
   <div class="masthead">
     <div class="kicker">Est. 2026 · Points Contested Daily</div>
-    <h1>The Daily Five</h1>
+    <h1>NYT Competition</h1>
     <div class="dateline">
       <span id="today-label">—</span>
       <span>Standings</span>
@@ -348,8 +367,18 @@
   </div>
 
   <div class="board">
-    <div class="board-title">Season Standings — By Wins</div>
+    <div class="board-title" id="season-title">Season Standings</div>
+    <div id="season-board-body"><div class="loading">Loading standings…</div></div>
+  </div>
+
+  <div class="board">
+    <div class="board-title">All-Time Standings</div>
     <div id="board-body"><div class="loading">Loading standings…</div></div>
+  </div>
+
+  <div class="board">
+    <div class="board-title">Trophy Case — Season Titles</div>
+    <div id="trophy-body"><div class="loading">Loading trophy case…</div></div>
   </div>
 
   <div class="entry">
@@ -381,6 +410,7 @@
       <textarea id="f-calc" rows="8" style="width:100%; font-family:'Roboto Mono', monospace; font-size:14px; padding:9px 8px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
     </div>
     <div class="add-row">
+      <button class="secondary" id="calc-clear-btn">Clear</button>
       <button id="calc-btn">Calculate score</button>
     </div>
     <div id="calc-result"></div>
@@ -472,6 +502,16 @@ function fmtShortDate(iso){
   return `${m}/${d}/${y.slice(2)}`;
 }
 
+function seasonKey(iso){
+  return iso.slice(0,7); // "YYYY-MM"
+}
+
+function seasonLabel(key){
+  const [y,m] = key.split('-');
+  const d = new Date(Number(y), Number(m)-1, 1);
+  return d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+}
+
 async function load(){
   document.getElementById('today-label').textContent = fmtDateLabel();
   document.getElementById('f-date').value = todayISO();
@@ -534,12 +574,12 @@ function toggleWinner(p){
   });
 }
 
-function totals(){
+function computeStandings(entries){
   const t = {};
   state.players.forEach(p => t[p] = { wins:0, points:0 });
   let tie = { wins:0, points:0 };
 
-  state.entries.forEach(e => {
+  entries.forEach(e => {
     if(e.players.length > 1){
       // tie day — tracked separately, does not touch personal totals
       tie.wins += 1;
@@ -560,6 +600,35 @@ function totals(){
   return rows;
 }
 
+function currentSeasonEntries(){
+  const key = seasonKey(todayISO());
+  return state.entries.filter(e => seasonKey(e.date) === key);
+}
+
+function computeTrophyCase(){
+  const currentKey = seasonKey(todayISO());
+  const seasonKeys = [...new Set(state.entries.map(e => seasonKey(e.date)))]
+    .filter(k => k !== currentKey)
+    .sort();
+
+  const counts = {};
+  state.players.forEach(p => counts[p] = 0);
+
+  seasonKeys.forEach(key => {
+    const entries = state.entries.filter(e => seasonKey(e.date) === key);
+    const rows = computeStandings(entries).filter(r => !r.isTie);
+    if(rows.length === 0) return;
+    const top = rows[0];
+    if(top.wins === 0) return; // nobody won anything that season
+    const champions = rows.filter(r => r.wins === top.wins && r.points === top.points);
+    champions.forEach(c => { counts[c.name] = (counts[c.name] || 0) + 1; });
+  });
+
+  return Object.entries(counts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a,b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
 function record(){
   if(state.entries.length === 0) return null;
   const max = Math.max(...state.entries.map(e => Number(e.points)));
@@ -569,7 +638,9 @@ function record(){
 
 function render(){
   renderRecord();
-  renderBoard();
+  renderSeasonBoard();
+  renderAllTimeBoard();
+  renderTrophyCase();
   renderHistory();
 }
 
@@ -585,11 +656,10 @@ function renderRecord(){
   document.getElementById('record-value').textContent = `${rec.max} pts — ${parts.join(' · ')}`;
 }
 
-function renderBoard(){
-  const body = document.getElementById('board-body');
-  const ranked = totals();
-  if(state.entries.length === 0){
-    body.innerHTML = `<div class="empty">No results logged yet — add today's winner below.</div>`;
+function renderBoardInto(bodyId, ranked, emptyText){
+  const body = document.getElementById(bodyId);
+  if(ranked.every(r => r.wins === 0 && r.points === 0)){
+    body.innerHTML = `<div class="empty">${emptyText}</div>`;
     return;
   }
   body.innerHTML = ranked.map((r, i) => {
@@ -603,6 +673,33 @@ function renderBoard(){
         </div>
       </div>`;
   }).join('');
+}
+
+function renderSeasonBoard(){
+  const key = seasonKey(todayISO());
+  document.getElementById('season-title').textContent = `Season Standings — ${seasonLabel(key)}`;
+  const ranked = computeStandings(currentSeasonEntries());
+  renderBoardInto('season-board-body', ranked, 'No results logged yet this month.');
+}
+
+function renderAllTimeBoard(){
+  const ranked = computeStandings(state.entries);
+  renderBoardInto('board-body', ranked, 'No results logged yet — add today\'s winner below.');
+}
+
+function renderTrophyCase(){
+  const body = document.getElementById('trophy-body');
+  const trophies = computeTrophyCase();
+  if(trophies.length === 0){
+    body.innerHTML = `<div class="empty">No completed seasons yet.</div>`;
+    return;
+  }
+  body.innerHTML = trophies.map(t => `
+    <div class="trophy-row">
+      <div class="trophy-name">${t.name}</div>
+      <div class="trophy-count ${t.count===0 ? 'zero' : ''}">${t.count > 0 ? '🏆 × ' + t.count : '—'}</div>
+    </div>
+  `).join('');
 }
 
 function renderHistory(){
@@ -739,13 +836,13 @@ function runCalculator(){
     html += `<div class="calc-line"><span>Connections (${detail})</span><span>${connections.points} pt${connections.points===1?'':'s'}</span></div>`;
   }
   html += `<div class="calc-total"><span>Total</span><span>${total} pt${total===1?'':'s'}</span></div>`;
-  html += `<button class="calc-use-btn secondary" id="calc-use-btn">Use this score in log below</button>`;
 
   resultEl.innerHTML = html;
-  document.getElementById('calc-use-btn').addEventListener('click', () => {
-    document.getElementById('f-points').value = total;
-    document.getElementById('f-points').scrollIntoView({ behavior:'smooth', block:'center' });
-  });
+}
+
+function clearCalculator(){
+  document.getElementById('f-calc').value = '';
+  document.getElementById('calc-result').innerHTML = '';
 }
 
 async function bulkImport(){
@@ -785,6 +882,7 @@ function showBulkMsg(text){
 document.getElementById('add-btn').addEventListener('click', addEntry);
 document.getElementById('bulk-btn').addEventListener('click', bulkImport);
 document.getElementById('calc-btn').addEventListener('click', runCalculator);
+document.getElementById('calc-clear-btn').addEventListener('click', clearCalculator);
 
 load();
 </script>
