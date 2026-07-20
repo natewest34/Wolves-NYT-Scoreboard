@@ -234,3 +234,559 @@
     color:var(--ink);
   }
   button.danger{
+    background:transparent;
+    color:var(--red);
+    border-color:var(--red);
+    font-size:10px;
+    padding:4px 8px;
+  }
+  .add-row{display:flex; justify-content:flex-end; margin-top:14px;}
+  .calc-result{
+    margin-top:14px;
+    border-top:1px solid var(--paper-line);
+    padding-top:12px;
+  }
+  .calc-line{
+    display:flex;
+    justify-content:space-between;
+    font-family:'Roboto Mono', monospace;
+    font-size:13px;
+    color:var(--ink-soft);
+    padding:3px 0;
+  }
+  .calc-total{
+    display:flex;
+    justify-content:space-between;
+    font-family:'Roboto Mono', monospace;
+    font-size:16px;
+    font-weight:700;
+    color:var(--ink);
+    padding:8px 0 4px;
+    border-top:1px solid var(--paper-line);
+    margin-top:6px;
+  }
+  .calc-error{
+    font-family:'Roboto Mono', monospace;
+    font-size:12px;
+    color:var(--red);
+  }
+  .calc-use-btn{margin-top:10px; width:100%;}
+  .msg{
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    color:var(--red);
+    min-height:14px;
+    margin-top:8px;
+  }
+
+  /* History */
+  .history{margin-top:34px;}
+  .history-list{max-height:280px; overflow-y:auto;}
+  .h-row{
+    display:grid;
+    grid-template-columns:76px 1fr auto auto;
+    align-items:center;
+    gap:10px;
+    padding:9px 4px;
+    border-bottom:1px solid var(--paper-line);
+    font-size:14px;
+  }
+  .h-date{
+    font-family:'Roboto Mono', monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+  }
+  .tie-tag{
+    display:inline-block;
+    font-family:'Roboto Mono', monospace;
+    font-size:9px;
+    letter-spacing:.06em;
+    color:var(--red);
+    border:1px solid var(--red);
+    padding:1px 5px;
+    margin-left:6px;
+    vertical-align:middle;
+  }
+  .h-pts{
+    font-family:'Roboto Mono', monospace;
+    font-weight:700;
+    font-size:13px;
+  }
+
+  .loading{
+    font-family:'Roboto Mono', monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    text-align:center;
+    padding:30px 0;
+  }
+  footer{
+    margin-top:30px;
+    text-align:center;
+    font-family:'Roboto Mono', monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+    letter-spacing:.05em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="kicker">Est. 2026 · Points Contested Daily</div>
+    <h1>The Daily Five</h1>
+    <div class="dateline">
+      <span id="today-label">—</span>
+      <span>Standings</span>
+    </div>
+  </div>
+
+  <div class="record" id="record-block" style="display:none;">
+    <div class="record-label">Record Day (Most Points)</div>
+    <div class="record-value" id="record-value">—</div>
+  </div>
+
+  <div class="board">
+    <div class="board-title">Season Standings — By Wins</div>
+    <div id="board-body"><div class="loading">Loading standings…</div></div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-title">Log Today's Result</div>
+    <div class="field">
+      <label for="f-date">Date</label>
+      <input type="date" id="f-date">
+    </div>
+    <div class="field">
+      <label>Winner(s)</label>
+      <div class="winner-picker" id="winner-picker"></div>
+      <div class="hint">Select more than one for a tie — ties don't count toward personal wins or points, they're tracked separately</div>
+    </div>
+    <div class="field">
+      <label for="f-points">Points</label>
+      <input type="number" id="f-points" placeholder="e.g. 1" step="1">
+    </div>
+    <div class="add-row">
+      <button id="add-btn">Add result</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="entry" id="calc-block">
+    <div class="entry-title">Score Calculator</div>
+    <div class="hint" style="margin-bottom:10px;">Paste your Wordle and/or Connections share text below (either or both at once).</div>
+    <div class="field">
+      <label for="f-calc">Paste Results</label>
+      <textarea id="f-calc" rows="8" style="width:100%; font-family:'Roboto Mono', monospace; font-size:14px; padding:9px 8px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
+    </div>
+    <div class="add-row">
+      <button id="calc-btn">Calculate score</button>
+    </div>
+    <div id="calc-result"></div>
+  </div>
+
+  <div class="entry" id="bulk-block">
+    <div class="entry-title">Bulk Import</div>
+    <div class="hint" style="margin-bottom:10px;">Paste lines like: <code>7/13/26 Michaela (10 points)</code> or <code>6/29/26 Michaela, Thomas (8 pts)</code> — one per line.</div>
+    <div class="field">
+      <label for="f-bulk">Lines</label>
+      <textarea id="f-bulk" rows="6" style="width:100%; font-family:'Source Serif 4', Georgia, serif; font-size:15px; padding:9px 8px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
+    </div>
+    <div class="add-row">
+      <button id="bulk-btn">Import lines</button>
+    </div>
+    <div class="msg" id="bulk-msg"></div>
+  </div>
+
+  <div class="history">
+    <div class="board-title">Recent Log</div>
+    <div class="history-list" id="history-body"><div class="loading">Loading log…</div></div>
+  </div>
+
+  <footer>Tap an entry to remove it · Data saved via JSONBin</footer>
+</div>
+
+<script>
+// ---- JSONBin config: fill these in after you create your bin ----
+const JSONBIN_BIN_ID = '6a5da882da38895dfe7475d3';
+const JSONBIN_API_KEY = '$2a$10$xxQoEgOVxbW6G200N8HNse4gX/XCiTI9QPXiJFCUTT0e5tjs0XTla';
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+// -------------------------------------------------------------
+
+const DEFAULT_PLAYERS = ['Tanner','Thomas','Nathan','Jake','Michaela'];
+const TIE_LABEL = 'Ties';
+const NICKNAMES = { 'nate': 'Nathan' };
+
+let state = { players: DEFAULT_PLAYERS.slice(), entries: [] };
+let selectedWinners = [];
+
+function todayISO(){
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off*60000).toISOString().slice(0,10);
+}
+
+function fmtDateLabel(){
+  const d = new Date();
+  return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+}
+
+function resolveName(raw){
+  const trimmed = raw.trim();
+  const lower = trimmed.toLowerCase();
+  if(NICKNAMES[lower]) return NICKNAMES[lower];
+  const match = state.players.find(p => p.toLowerCase() === lower);
+  if(match) return match;
+  // not a known player — title-case whatever was typed and add them to roster
+  const titled = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  if(!state.players.includes(titled)) state.players.push(titled);
+  return titled;
+}
+
+function parseDate(raw){
+  const parts = raw.trim().split('/');
+  if(parts.length !== 3) return null;
+  let [m, d, y] = parts.map(x => x.trim());
+  if(y.length === 2) y = '20' + y;
+  m = m.padStart(2,'0'); d = d.padStart(2,'0');
+  if(Number(m) < 1 || Number(m) > 12 || Number(d) < 1 || Number(d) > 31) return null;
+  return `${y}-${m}-${d}`;
+}
+
+function parseBulkLine(line){
+  const cleaned = line.trim();
+  if(!cleaned) return null;
+  const m = cleaned.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*:?\s+(.+?)\s*\(\s*(\d+)\s*(?:points?|pts?)\s*\)\s*$/i);
+  if(!m) return { error: `Could not parse: "${cleaned}"` };
+  const iso = parseDate(m[1]);
+  if(!iso) return { error: `Bad date: "${cleaned}"` };
+  const names = m[2].split(',').map(n => resolveName(n));
+  const points = Number(m[3]);
+  if(names.length === 0 || Number.isNaN(points)) return { error: `Could not parse: "${cleaned}"` };
+  return { date: iso, players: names, points };
+}
+
+function fmtShortDate(iso){
+  const [y,m,d] = iso.split('-');
+  return `${m}/${d}/${y.slice(2)}`;
+}
+
+async function load(){
+  document.getElementById('today-label').textContent = fmtDateLabel();
+  document.getElementById('f-date').value = todayISO();
+
+  try{
+    const res = await fetch(`${JSONBIN_URL}/latest`, {
+      headers: { 'X-Master-Key': JSONBIN_API_KEY }
+    });
+    if(res.ok){
+      const data = await res.json();
+      const parsed = data.record;
+      if(parsed && parsed.players && parsed.entries){
+        state = parsed;
+        // migrate old single-player entries to players array, drop any legacy game field
+        state.entries = state.entries.map(e => {
+          const players = e.players || (e.player ? [e.player] : []);
+          return { id:e.id, date:e.date, players, points:e.points };
+        });
+      }
+    }
+  }catch(e){
+    // couldn't reach JSONBin — using defaults for now
+  }
+
+  renderWinnerPicker();
+  render();
+}
+
+async function save(){
+  try{
+    const res = await fetch(JSONBIN_URL, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_API_KEY
+      },
+      body: JSON.stringify(state)
+    });
+    if(!res.ok){
+      showMsg('Could not save — check your JSONBin config.');
+    }
+  }catch(e){
+    showMsg('Could not save — try again.');
+  }
+}
+
+function renderWinnerPicker(){
+  const el = document.getElementById('winner-picker');
+  el.innerHTML = state.players.map(p => `<div class="chip" data-player="${p}" onclick="toggleWinner('${p}')">${p}</div>`).join('');
+}
+
+function toggleWinner(p){
+  if(selectedWinners.includes(p)){
+    selectedWinners = selectedWinners.filter(x => x !== p);
+  }else{
+    selectedWinners.push(p);
+  }
+  document.querySelectorAll('.chip').forEach(c => {
+    c.classList.toggle('selected', selectedWinners.includes(c.dataset.player));
+  });
+}
+
+function totals(){
+  const t = {};
+  state.players.forEach(p => t[p] = { wins:0, points:0 });
+  let tie = { wins:0, points:0 };
+
+  state.entries.forEach(e => {
+    if(e.players.length > 1){
+      // tie day — tracked separately, does not touch personal totals
+      tie.wins += 1;
+      tie.points += Number(e.points);
+    }else if(e.players.length === 1){
+      const p = e.players[0];
+      if(!t[p]) t[p] = { wins:0, points:0 };
+      t[p].wins += 1;
+      t[p].points += Number(e.points);
+    }
+  });
+
+  const rows = Object.entries(t).map(([name, stat]) => ({ name, ...stat, isTie:false }));
+  if(tie.wins > 0){
+    rows.push({ name: TIE_LABEL, wins: tie.wins, points: tie.points, isTie:true });
+  }
+  rows.sort((a,b) => b.wins - a.wins || b.points - a.points);
+  return rows;
+}
+
+function record(){
+  if(state.entries.length === 0) return null;
+  const max = Math.max(...state.entries.map(e => Number(e.points)));
+  const holders = state.entries.filter(e => Number(e.points) === max);
+  return { max, holders };
+}
+
+function render(){
+  renderRecord();
+  renderBoard();
+  renderHistory();
+}
+
+function renderRecord(){
+  const block = document.getElementById('record-block');
+  const rec = record();
+  if(!rec){
+    block.style.display = 'none';
+    return;
+  }
+  block.style.display = 'flex';
+  const parts = rec.holders.map(h => `${h.players.join(' & ')} — ${fmtShortDate(h.date)}`);
+  document.getElementById('record-value').textContent = `${rec.max} pts — ${parts.join(' · ')}`;
+}
+
+function renderBoard(){
+  const body = document.getElementById('board-body');
+  const ranked = totals();
+  if(state.entries.length === 0){
+    body.innerHTML = `<div class="empty">No results logged yet — add today's winner below.</div>`;
+    return;
+  }
+  body.innerHTML = ranked.map((r, i) => {
+    return `
+      <div class="row ${i===0 && !r.isTie ? 'first' : ''} ${r.isTie ? 'tie-row' : ''}">
+        <div class="rank">${r.isTie ? '—' : i+1}</div>
+        <div class="name">${r.name}</div>
+        <div class="pts-block">
+          <div class="wins">${r.wins}<small> ${r.isTie ? 'tie'+(r.wins===1?'':'s') : 'win'+(r.wins===1?'':'s')}</small></div>
+          <div class="points-sub">${r.points} pt${r.points===1?'':'s'} total</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderHistory(){
+  const body = document.getElementById('history-body');
+  if(state.entries.length === 0){
+    body.innerHTML = `<div class="empty">Nothing logged yet.</div>`;
+    return;
+  }
+  const sorted = [...state.entries].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+  body.innerHTML = sorted.map(e => `
+    <div class="h-row">
+      <div class="h-date">${e.date.slice(5)}</div>
+      <div>
+        <div>${e.players.join(' & ')}${e.players.length > 1 ? '<span class="tie-tag">TIE</span>' : ''}</div>
+      </div>
+      <div class="h-pts">+${e.points}</div>
+      <button class="danger" onclick="removeEntry(${e.id})">Remove</button>
+    </div>
+  `).join('');
+}
+
+function showMsg(text){
+  const m = document.getElementById('msg');
+  m.textContent = text;
+  setTimeout(() => { if(m.textContent === text) m.textContent = ''; }, 2500);
+}
+
+async function addEntry(){
+  const date = document.getElementById('f-date').value;
+  const points = document.getElementById('f-points').value;
+
+  if(!date || selectedWinners.length === 0 || points === ''){
+    showMsg('Add a date, at least one winner, and points.');
+    return;
+  }
+  const num = Number(points);
+  if(Number.isNaN(num)){
+    showMsg('Points must be a number.');
+    return;
+  }
+
+  state.entries.push({
+    id: Date.now(),
+    date, players: [...selectedWinners], points: num
+  });
+
+  document.getElementById('f-points').value = '';
+  selectedWinners = [];
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+
+  render();
+  await save();
+  showMsg('Added.');
+}
+
+async function removeEntry(id){
+  state.entries = state.entries.filter(e => e.id !== id);
+  render();
+  await save();
+}
+
+function parseWordleScore(text){
+  const m = text.match(/Wordle[^\n]*?(X|\d{1,2})\s*\/\s*6/i);
+  if(!m) return null;
+  const g = m[1];
+  if(/^x$/i.test(g)) return { solved:false, guesses:null, points:0 };
+  const guesses = Number(g);
+  if(guesses < 1 || guesses > 6) return null;
+  return { solved:true, guesses, points: 7 - guesses };
+}
+
+function parseConnectionsScore(text){
+  const idx = text.search(/connections/i);
+  if(idx === -1) return null;
+  const after = text.slice(idx);
+  const lines = after.split('\n').map(l => l.trim()).filter(Boolean);
+  const rowRegex = /^[\u{1F7E8}\u{1F7E9}\u{1F7E6}\u{1F7EA}]{4}$/u; // 🟨🟩🟦🟪
+  const rows = [];
+  for(const line of lines){
+    if(rowRegex.test(line)){
+      rows.push(line);
+    }else if(rows.length > 0){
+      break; // stop once rows have started and we hit a non-row line
+    }
+    // otherwise keep skipping header / puzzle-number lines before rows begin
+  }
+  if(rows.length === 0) return null;
+
+  const solvedColors = new Set();
+  let mistakes = 0;
+  let gameOver = false;
+  for(const row of rows){
+    const chars = [...row];
+    const allSame = chars.every(c => c === chars[0]);
+    if(allSame){
+      solvedColors.add(chars[0]);
+    }else{
+      mistakes++;
+      if(mistakes >= 4){ gameOver = true; break; }
+    }
+  }
+  const solved = solvedColors.size === 4 && !gameOver;
+  return { solved, mistakes: Math.min(mistakes, 4), points: solved ? (5 - mistakes) : 0 };
+}
+
+function runCalculator(){
+  const text = document.getElementById('f-calc').value;
+  const resultEl = document.getElementById('calc-result');
+
+  if(!text.trim()){
+    resultEl.innerHTML = `<div class="calc-error">Paste a Wordle and/or Connections result first.</div>`;
+    return;
+  }
+
+  const wordle = parseWordleScore(text);
+  const connections = parseConnectionsScore(text);
+
+  if(!wordle && !connections){
+    resultEl.innerHTML = `<div class="calc-error">Couldn't recognize a Wordle or Connections result in that text.</div>`;
+    return;
+  }
+
+  let total = 0;
+  let html = '';
+
+  if(wordle){
+    total += wordle.points;
+    const detail = wordle.solved ? `solved in ${wordle.guesses}/6` : `not solved (X/6)`;
+    html += `<div class="calc-line"><span>Wordle (${detail})</span><span>${wordle.points} pt${wordle.points===1?'':'s'}</span></div>`;
+  }
+  if(connections){
+    total += connections.points;
+    const detail = connections.solved ? `solved, ${connections.mistakes} mistake${connections.mistakes===1?'':'s'}` : `not solved`;
+    html += `<div class="calc-line"><span>Connections (${detail})</span><span>${connections.points} pt${connections.points===1?'':'s'}</span></div>`;
+  }
+  html += `<div class="calc-total"><span>Total</span><span>${total} pt${total===1?'':'s'}</span></div>`;
+  html += `<button class="calc-use-btn secondary" id="calc-use-btn">Use this score in log below</button>`;
+
+  resultEl.innerHTML = html;
+  document.getElementById('calc-use-btn').addEventListener('click', () => {
+    document.getElementById('f-points').value = total;
+    document.getElementById('f-points').scrollIntoView({ behavior:'smooth', block:'center' });
+  });
+}
+
+async function bulkImport(){
+  const raw = document.getElementById('f-bulk').value;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  if(lines.length === 0){
+    showBulkMsg('Paste some lines first.');
+    return;
+  }
+  const errors = [];
+  let added = 0;
+  lines.forEach(line => {
+    const parsed = parseBulkLine(line);
+    if(!parsed){ return; }
+    if(parsed.error){ errors.push(parsed.error); return; }
+    state.entries.push({ id: Date.now() + added, date: parsed.date, players: parsed.players, points: parsed.points });
+    added++;
+  });
+
+  renderWinnerPicker();
+  render();
+  await save();
+
+  if(errors.length){
+    showBulkMsg(`Added ${added}. ${errors.length} line(s) skipped — check formatting.`);
+  }else{
+    showBulkMsg(`Added ${added} result${added===1?'':'s'}.`);
+    document.getElementById('f-bulk').value = '';
+  }
+}
+
+function showBulkMsg(text){
+  const m = document.getElementById('bulk-msg');
+  m.textContent = text;
+}
+
+document.getElementById('add-btn').addEventListener('click', addEntry);
+document.getElementById('bulk-btn').addEventListener('click', bulkImport);
+document.getElementById('calc-btn').addEventListener('click', runCalculator);
+
+load();
+</script>
+</body>
+</html>
