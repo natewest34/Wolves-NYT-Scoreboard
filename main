@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Daily Five — Standings</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,500;0,600;0,700;1,500&family=Roboto+Mono:wght@400;500;700&display=swap');
+
+  :root{
+    --paper:#f6f3ea;
+    --paper-line: #d8d2c0;
+    --paper-card:#fffdf7;
+    --paper-accent:#fbf5e6;
+    --ink:#1c1a16;
+    --ink-soft:#5a5648;
+    --red:#b23a2e;
+    --gold:#a9822f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#161410;
+      --paper-line:#3a3628;
+      --paper-card:#1e1b14;
+      --paper-accent:#241f12;
+      --ink:#f1ede0;
+      --ink-soft:#b3ab94;
+      --red:#e2776a;
+      --gold:#dcb45c;
+    }
+  }
+  *{box-sizing:border-box;}
+  html{color-scheme: light dark;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Source Serif 4', Georgia, serif;
+    padding:28px 16px 60px;
+  }
+  .wrap{max-width:640px;margin:0 auto;}
+
+  /* Masthead */
+  .masthead{
+    text-align:center;
+    border-bottom:3px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:6px;
+  }
+  .kicker{
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--red);
+    margin-bottom:6px;
+  }
+  h1{
+    font-size:34px;
+    font-weight:700;
+    margin:0;
+    letter-spacing:.01em;
+  }
+  .dateline{
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-top:8px;
+    display:flex;
+    justify-content:space-between;
+    border-top:1px solid var(--paper-line);
+    padding-top:6px;
+  }
+
+  /* Record callout */
+  .record{
+    margin-top:18px;
+    border:1px solid var(--gold);
+    background:var(--paper-accent);
+    padding:10px 14px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .record-label{
+    font-family:'Roboto Mono', monospace;
+    font-size:10px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--gold);
+  }
+  .record-value{
+    font-family:'Roboto Mono', monospace;
+    font-size:13px;
+    font-weight:700;
+    color:var(--ink);
+    text-align:right;
+  }
+
+  /* Leaderboard */
+  .board{margin-top:26px;}
+  .board-title{
+    font-family:'Roboto Mono', monospace;
+    font-size:12px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-bottom:10px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .board-title::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background:var(--paper-line);
+  }
+  .row{
+    display:grid;
+    grid-template-columns:34px 1fr auto;
+    align-items:baseline;
+    gap:12px;
+    padding:11px 4px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  .row:first-child{border-top:1px solid var(--paper-line);}
+  .rank{
+    font-family:'Roboto Mono', monospace;
+    font-size:13px;
+    color:var(--ink-soft);
+  }
+  .row.first .rank{color:var(--gold); font-weight:700;}
+  .row.tie-row .name{ font-style:italic; color:var(--red); }
+  .row.tie-row .rank{ color:var(--red); }
+  .name{font-size:19px; font-weight:600;}
+  .pts-block{text-align:right;}
+  .wins{
+    font-family:'Roboto Mono', monospace;
+    font-size:18px;
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+  }
+  .wins small{font-weight:400; color:var(--ink-soft); font-size:11px; margin-left:3px; text-transform:uppercase; letter-spacing:.05em;}
+  .points-sub{
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-top:2px;
+  }
+  .empty{
+    font-family:'Roboto Mono', monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    padding:14px 4px;
+    text-align:center;
+  }
+
+  /* Entry form */
+  .entry{
+    margin-top:34px;
+    border:1px solid var(--ink);
+    padding:18px;
+    background:var(--paper-card);
+  }
+  .entry-title{
+    font-family:'Roboto Mono', monospace;
+    font-size:12px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    margin-bottom:14px;
+    color:var(--ink);
+  }
+  label{
+    display:block;
+    font-family:'Roboto Mono', monospace;
+    font-size:10px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-bottom:4px;
+  }
+  .field{margin-bottom:14px;}
+  select, input[type=number], input[type=date], input[type=text]{
+    width:100%;
+    font-family:'Source Serif 4', Georgia, serif;
+    font-size:16px;
+    padding:9px 8px;
+    border:1px solid var(--ink);
+    background:var(--paper);
+    color:var(--ink);
+    border-radius:0;
+  }
+  .winner-picker{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .chip{
+    font-family:'Roboto Mono', monospace;
+    font-size:13px;
+    padding:8px 12px;
+    border:1px solid var(--ink);
+    background:var(--paper);
+    color:var(--ink);
+    cursor:pointer;
+    user-select:none;
+  }
+  .chip.selected{
+    background:var(--ink);
+    color:var(--paper);
+  }
+  .hint{
+    font-family:'Roboto Mono', monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+    margin-top:6px;
+  }
+  button{
+    font-family:'Roboto Mono', monospace;
+    font-size:12px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    padding:11px 16px;
+    border:1px solid var(--ink);
+    background:var(--ink);
+    color:var(--paper);
+    cursor:pointer;
+  }
+  button:active{transform:translateY(1px);}
+  button.secondary{
+    background:transparent;
+    color:var(--ink);
+  }
+  button.danger{
+    background:transparent;
+    color:var(--red);
+    border-color:var(--red);
+    font-size:10px;
+    padding:4px 8px;
+  }
+  .add-row{display:flex; justify-content:flex-end; margin-top:14px;}
+  .msg{
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    color:var(--red);
+    min-height:14px;
+    margin-top:8px;
+  }
+
+  /* History */
+  .history{margin-top:34px;}
+  .history-list{max-height:280px; overflow-y:auto;}
+  .h-row{
+    display:grid;
+    grid-template-columns:76px 1fr auto auto;
+    align-items:center;
+    gap:10px;
+    padding:9px 4px;
+    border-bottom:1px solid var(--paper-line);
+    font-size:14px;
+  }
+  .h-date{
+    font-family:'Roboto Mono', monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+  }
+  .tie-tag{
+    display:inline-block;
+    font-family:'Roboto Mono', monospace;
+    font-size:9px;
+    letter-spacing:.06em;
+    color:var(--red);
+    border:1px solid var(--red);
+    padding:1px 5px;
+    margin-left:6px;
+    vertical-align:middle;
+  }
+  .h-pts{
+    font-family:'Roboto Mono', monospace;
+    font-weight:700;
+    font-size:13px;
+  }
+
+  .loading{
+    font-family:'Roboto Mono', monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    text-align:center;
+    padding:30px 0;
+  }
+  footer{
+    margin-top:30px;
+    text-align:center;
+    font-family:'Roboto Mono', monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+    letter-spacing:.05em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="kicker">Est. 2026 · Points Contested Daily</div>
+    <h1>The Daily Five</h1>
+    <div class="dateline">
+      <span id="today-label">—</span>
+      <span>Standings</span>
+    </div>
+  </div>
+
+  <div class="record" id="record-block" style="display:none;">
+    <div class="record-label">Record Day (Most Points)</div>
+    <div class="record-value" id="record-value">—</div>
+  </div>
+
+  <div class="board">
+    <div class="board-title">Season Standings — By Wins</div>
+    <div id="board-body"><div class="loading">Loading standings…</div></div>
+  </div>
+
+  <div class="entry">
+    <div class="entry-title">Log Today's Result</div>
+    <div class="field">
+      <label for="f-date">Date</label>
+      <input type="date" id="f-date">
+    </div>
+    <div class="field">
+      <label>Winner(s)</label>
+      <div class="winner-picker" id="winner-picker"></div>
+      <div class="hint">Select more than one for a tie — ties don't count toward personal wins or points, they're tracked separately</div>
+    </div>
+    <div class="field">
+      <label for="f-points">Points</label>
+      <input type="number" id="f-points" placeholder="e.g. 1" step="1">
+    </div>
+    <div class="add-row">
+      <button id="add-btn">Add result</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="entry" id="bulk-block">
+    <div class="entry-title">Bulk Import</div>
+    <div class="hint" style="margin-bottom:10px;">Paste lines like: <code>7/13/26 Michaela (10 points)</code> or <code>6/29/26 Michaela, Thomas (8 pts)</code> — one per line.</div>
+    <div class="field">
+      <label for="f-bulk">Lines</label>
+      <textarea id="f-bulk" rows="6" style="width:100%; font-family:'Source Serif 4', Georgia, serif; font-size:15px; padding:9px 8px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
+    </div>
+    <div class="add-row">
+      <button id="bulk-btn">Import lines</button>
+    </div>
+    <div class="msg" id="bulk-msg"></div>
+  </div>
+
+  <div class="history">
+    <div class="board-title">Recent Log</div>
+    <div class="history-list" id="history-body"><div class="loading">Loading log…</div></div>
+  </div>
+
+  <footer>Tap an entry to remove it · Data saved via JSONBin</footer>
+</div>
+
+<script>
+// ---- JSONBin config: fill these in after you create your bin ----
+const JSONBIN_BIN_ID = '6a5da882da38895dfe7475d3';
+const JSONBIN_API_KEY = '$2a$10$xxQoEgOVxbW6G200N8HNse4gX/XCiTI9QPXiJFCUTT0e5tjs0XTla';
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+// -------------------------------------------------------------
+
+const DEFAULT_PLAYERS = ['Tanner','Thomas','Nathan','Jake','Michaela'];
+const TIE_LABEL = 'Ties';
+const NICKNAMES = { 'nate': 'Nathan' };
+
+let state = { players: DEFAULT_PLAYERS.slice(), entries: [] };
+let selectedWinners = [];
+
+function todayISO(){
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off*60000).toISOString().slice(0,10);
+}
+
+function fmtDateLabel(){
+  const d = new Date();
+  return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+}
+
+function resolveName(raw){
+  const trimmed = raw.trim();
+  const lower = trimmed.toLowerCase();
+  if(NICKNAMES[lower]) return NICKNAMES[lower];
+  const match = state.players.find(p => p.toLowerCase() === lower);
+  if(match) return match;
+  // not a known player — title-case whatever was typed and add them to roster
+  const titled = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  if(!state.players.includes(titled)) state.players.push(titled);
+  return titled;
+}
+
+function parseDate(raw){
+  const parts = raw.trim().split('/');
+  if(parts.length !== 3) return null;
+  let [m, d, y] = parts.map(x => x.trim());
+  if(y.length === 2) y = '20' + y;
+  m = m.padStart(2,'0'); d = d.padStart(2,'0');
+  if(Number(m) < 1 || Number(m) > 12 || Number(d) < 1 || Number(d) > 31) return null;
+  return `${y}-${m}-${d}`;
+}
+
+function parseBulkLine(line){
+  const cleaned = line.trim();
+  if(!cleaned) return null;
+  const m = cleaned.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*:?\s+(.+?)\s*\(\s*(\d+)\s*(?:points?|pts?)\s*\)\s*$/i);
+  if(!m) return { error: `Could not parse: "${cleaned}"` };
+  const iso = parseDate(m[1]);
+  if(!iso) return { error: `Bad date: "${cleaned}"` };
+  const names = m[2].split(',').map(n => resolveName(n));
+  const points = Number(m[3]);
+  if(names.length === 0 || Number.isNaN(points)) return { error: `Could not parse: "${cleaned}"` };
+  return { date: iso, players: names, points };
+}
+
+function fmtShortDate(iso){
+  const [y,m,d] = iso.split('-');
+  return `${m}/${d}/${y.slice(2)}`;
+}
+
+async function load(){
+  document.getElementById('today-label').textContent = fmtDateLabel();
+  document.getElementById('f-date').value = todayISO();
+
+  try{
+    const res = await fetch(`${JSONBIN_URL}/latest`, {
+      headers: { 'X-Master-Key': JSONBIN_API_KEY }
+    });
+    if(res.ok){
+      const data = await res.json();
+      const parsed = data.record;
+      if(parsed && parsed.players && parsed.entries){
+        state = parsed;
+        // migrate old single-player entries to players array, drop any legacy game field
+        state.entries = state.entries.map(e => {
+          const players = e.players || (e.player ? [e.player] : []);
+          return { id:e.id, date:e.date, players, points:e.points };
+        });
+      }
+    }
+  }catch(e){
+    // couldn't reach JSONBin — using defaults for now
+  }
+
+  renderWinnerPicker();
+  render();
+}
+
+async function save(){
+  try{
+    const res = await fetch(JSONBIN_URL, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_API_KEY
+      },
+      body: JSON.stringify(state)
+    });
+    if(!res.ok){
+      showMsg('Could not save — check your JSONBin config.');
+    }
+  }catch(e){
+    showMsg('Could not save — try again.');
+  }
+}
+
+function renderWinnerPicker(){
+  const el = document.getElementById('winner-picker');
+  el.innerHTML = state.players.map(p => `<div class="chip" data-player="${p}" onclick="toggleWinner('${p}')">${p}</div>`).join('');
+}
+
+function toggleWinner(p){
+  if(selectedWinners.includes(p)){
+    selectedWinners = selectedWinners.filter(x => x !== p);
+  }else{
+    selectedWinners.push(p);
+  }
+  document.querySelectorAll('.chip').forEach(c => {
+    c.classList.toggle('selected', selectedWinners.includes(c.dataset.player));
+  });
+}
+
+function totals(){
+  const t = {};
+  state.players.forEach(p => t[p] = { wins:0, points:0 });
+  let tie = { wins:0, points:0 };
+
+  state.entries.forEach(e => {
+    if(e.players.length > 1){
+      // tie day — tracked separately, does not touch personal totals
+      tie.wins += 1;
+      tie.points += Number(e.points);
+    }else if(e.players.length === 1){
+      const p = e.players[0];
+      if(!t[p]) t[p] = { wins:0, points:0 };
+      t[p].wins += 1;
+      t[p].points += Number(e.points);
+    }
+  });
+
+  const rows = Object.entries(t).map(([name, stat]) => ({ name, ...stat, isTie:false }));
+  if(tie.wins > 0){
+    rows.push({ name: TIE_LABEL, wins: tie.wins, points: tie.points, isTie:true });
+  }
+  rows.sort((a,b) => b.wins - a.wins || b.points - a.points);
+  return rows;
+}
+
+function record(){
+  if(state.entries.length === 0) return null;
+  const max = Math.max(...state.entries.map(e => Number(e.points)));
+  const holders = state.entries.filter(e => Number(e.points) === max);
+  return { max, holders };
+}
+
+function render(){
+  renderRecord();
+  renderBoard();
+  renderHistory();
+}
+
+function renderRecord(){
+  const block = document.getElementById('record-block');
+  const rec = record();
+  if(!rec){
+    block.style.display = 'none';
+    return;
+  }
+  block.style.display = 'flex';
+  const parts = rec.holders.map(h => `${h.players.join(' & ')} — ${fmtShortDate(h.date)}`);
+  document.getElementById('record-value').textContent = `${rec.max} pts — ${parts.join(' · ')}`;
+}
+
+function renderBoard(){
+  const body = document.getElementById('board-body');
+  const ranked = totals();
+  if(state.entries.length === 0){
+    body.innerHTML = `<div class="empty">No results logged yet — add today's winner below.</div>`;
+    return;
+  }
+  body.innerHTML = ranked.map((r, i) => {
+    return `
+      <div class="row ${i===0 && !r.isTie ? 'first' : ''} ${r.isTie ? 'tie-row' : ''}">
+        <div class="rank">${r.isTie ? '—' : i+1}</div>
+        <div class="name">${r.name}</div>
+        <div class="pts-block">
+          <div class="wins">${r.wins}<small> ${r.isTie ? 'tie'+(r.wins===1?'':'s') : 'win'+(r.wins===1?'':'s')}</small></div>
+          <div class="points-sub">${r.points} pt${r.points===1?'':'s'} total</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderHistory(){
+  const body = document.getElementById('history-body');
+  if(state.entries.length === 0){
+    body.innerHTML = `<div class="empty">Nothing logged yet.</div>`;
+    return;
+  }
+  const sorted = [...state.entries].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+  body.innerHTML = sorted.map(e => `
+    <div class="h-row">
+      <div class="h-date">${e.date.slice(5)}</div>
+      <div>
+        <div>${e.players.join(' & ')}${e.players.length > 1 ? '<span class="tie-tag">TIE</span>' : ''}</div>
+      </div>
+      <div class="h-pts">+${e.points}</div>
+      <button class="danger" onclick="removeEntry(${e.id})">Remove</button>
+    </div>
+  `).join('');
+}
+
+function showMsg(text){
+  const m = document.getElementById('msg');
+  m.textContent = text;
+  setTimeout(() => { if(m.textContent === text) m.textContent = ''; }, 2500);
+}
+
+async function addEntry(){
+  const date = document.getElementById('f-date').value;
+  const points = document.getElementById('f-points').value;
+
+  if(!date || selectedWinners.length === 0 || points === ''){
+    showMsg('Add a date, at least one winner, and points.');
+    return;
+  }
+  const num = Number(points);
+  if(Number.isNaN(num)){
+    showMsg('Points must be a number.');
+    return;
+  }
+
+  state.entries.push({
+    id: Date.now(),
+    date, players: [...selectedWinners], points: num
+  });
+
+  document.getElementById('f-points').value = '';
+  selectedWinners = [];
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+
+  render();
+  await save();
+  showMsg('Added.');
+}
+
+async function removeEntry(id){
+  state.entries = state.entries.filter(e => e.id !== id);
+  render();
+  await save();
+}
+
+async function bulkImport(){
+  const raw = document.getElementById('f-bulk').value;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  if(lines.length === 0){
+    showBulkMsg('Paste some lines first.');
+    return;
+  }
+  const errors = [];
+  let added = 0;
+  lines.forEach(line => {
+    const parsed = parseBulkLine(line);
+    if(!parsed){ return; }
+    if(parsed.error){ errors.push(parsed.error); return; }
+    state.entries.push({ id: Date.now() + added, date: parsed.date, players: parsed.players, points: parsed.points });
+    added++;
+  });
+
+  renderWinnerPicker();
+  render();
+  await save();
+
+  if(errors.length){
+    showBulkMsg(`Added ${added}. ${errors.length} line(s) skipped — check formatting.`);
+  }else{
+    showBulkMsg(`Added ${added} result${added===1?'':'s'}.`);
+    document.getElementById('f-bulk').value = '';
+  }
+}
+
+function showBulkMsg(text){
+  const m = document.getElementById('bulk-msg');
+  m.textContent = text;
+}
+
+document.getElementById('add-btn').addEventListener('click', addEntry);
+document.getElementById('bulk-btn').addEventListener('click', bulkImport);
+
+load();
+</script>
+</body>
+</html>
