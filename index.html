@@ -79,9 +79,8 @@
     background:var(--paper-accent);
     padding:10px 14px;
     display:flex;
-    align-items:baseline;
-    justify-content:space-between;
-    gap:10px;
+    flex-direction:column;
+    gap:4px;
   }
   .record-label{
     font-family:'Roboto Mono', monospace;
@@ -95,7 +94,7 @@
     font-size:13px;
     font-weight:700;
     color:var(--ink);
-    text-align:right;
+    line-height:1.5;
   }
 
   /* Leaderboard */
@@ -175,6 +174,17 @@
     white-space:nowrap;
   }
   .trophy-count.zero{color:var(--ink-soft); font-weight:400;}
+  .trophy-row.clickable{cursor:pointer;}
+  .trophy-row.clickable:active{opacity:0.7;}
+  .trophy-detail{
+    display:none;
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    padding:0 4px 10px;
+    margin-top:-6px;
+  }
+  .trophy-detail.open{display:block;}
 
   /* Entry form */
   .entry{
@@ -775,8 +785,8 @@ function computeTrophyCase(){
     .filter(k => k !== currentKey)
     .sort();
 
-  const counts = {};
-  state.players.forEach(p => counts[p] = 0);
+  const seasonsWon = {};
+  state.players.forEach(p => seasonsWon[p] = []);
 
   seasonKeys.forEach(key => {
     const entries = state.entries.filter(e => seasonKey(e.date) === key);
@@ -785,11 +795,14 @@ function computeTrophyCase(){
     const top = rows[0];
     if(top.wins === 0) return; // nobody won anything that season
     const champions = rows.filter(r => r.wins === top.wins && r.points === top.points);
-    champions.forEach(c => { counts[c.name] = (counts[c.name] || 0) + 1; });
+    champions.forEach(c => {
+      if(!seasonsWon[c.name]) seasonsWon[c.name] = [];
+      seasonsWon[c.name].push(key);
+    });
   });
 
-  return Object.entries(counts)
-    .map(([name, count]) => ({ name, count }))
+  return Object.entries(seasonsWon)
+    .map(([name, seasons]) => ({ name, count: seasons.length, seasons }))
     .sort((a,b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
@@ -797,7 +810,21 @@ function record(){
   if(state.entries.length === 0) return null;
   const max = Math.max(...state.entries.map(e => Number(e.points)));
   const holders = state.entries.filter(e => Number(e.points) === max);
-  return { max, holders };
+
+  const groups = {};
+  const order = [];
+  holders.forEach(h => {
+    const key = h.players.join(' & ');
+    if(!groups[key]){ groups[key] = []; order.push(key); }
+    groups[key].push(h.date);
+  });
+
+  const parts = order.map(name => {
+    const dates = groups[name].sort().map(d => fmtShortDate(d));
+    return { name, dates };
+  });
+
+  return { max, parts };
 }
 
 function render(){
@@ -816,7 +843,7 @@ function renderRecord(){
     return;
   }
   block.style.display = 'flex';
-  const parts = rec.holders.map(h => `${h.players.join(' & ')} — ${fmtShortDate(h.date)}`);
+  const parts = rec.parts.map(p => `${p.name} (${p.dates.join(', ')})`);
   document.getElementById('record-value').textContent = `${rec.max} pts — ${parts.join(' · ')}`;
 }
 
@@ -858,12 +885,21 @@ function renderTrophyCase(){
     body.innerHTML = `<div class="empty">No completed seasons yet.</div>`;
     return;
   }
-  body.innerHTML = trophies.map(t => `
-    <div class="trophy-row">
+  body.innerHTML = trophies.map((t, i) => {
+    const seasonList = t.seasons.map(s => seasonLabel(s)).join(', ');
+    return `
+    <div class="trophy-row ${t.count > 0 ? 'clickable' : ''}" ${t.count > 0 ? `onclick="toggleTrophyDetail(${i})"` : ''}>
       <div class="trophy-name">${t.name}</div>
       <div class="trophy-count ${t.count===0 ? 'zero' : ''}">${t.count > 0 ? '🏆 × ' + t.count : '—'}</div>
     </div>
-  `).join('');
+    ${t.count > 0 ? `<div class="trophy-detail" id="trophy-detail-${i}">${seasonList}</div>` : ''}
+  `;
+  }).join('');
+}
+
+function toggleTrophyDetail(i){
+  const el = document.getElementById(`trophy-detail-${i}`);
+  if(el) el.classList.toggle('open');
 }
 
 function renderHistory(){
