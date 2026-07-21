@@ -347,6 +347,118 @@
     color:var(--ink-soft);
     letter-spacing:.05em;
   }
+
+  .test-mode-row{
+    margin-top:34px;
+    display:flex;
+    justify-content:center;
+  }
+  .test-mode-banner{
+    display:none;
+    position:sticky;
+    top:0;
+    z-index:50;
+    margin:20px -16px 0;
+    padding:10px 16px;
+    background:var(--red);
+    color:#fff;
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    letter-spacing:.04em;
+    text-align:center;
+  }
+
+  /* Tiebreaker wheel */
+  .wheel-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.55);
+    z-index:100;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+  .wheel-overlay.open{ display:flex; }
+  .wheel-card{
+    background:var(--paper-card);
+    border:1px solid var(--ink);
+    padding:22px;
+    max-width:340px;
+    width:100%;
+    text-align:center;
+  }
+  .wheel-title{
+    font-family:'Roboto Mono', monospace;
+    font-size:12px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-bottom:16px;
+  }
+  .wheel-stage{
+    position:relative;
+    width:240px;
+    height:240px;
+    margin:0 auto 16px;
+  }
+  .wheel-pointer{
+    position:absolute;
+    top:-6px;
+    left:50%;
+    transform:translateX(-50%);
+    font-size:22px;
+    color:var(--ink);
+    z-index:5;
+    line-height:1;
+  }
+  .wheel-disc{
+    width:100%;
+    height:100%;
+    border-radius:50%;
+    border:3px solid var(--ink);
+    position:relative;
+    transition:transform 4.5s cubic-bezier(0.15, 0.65, 0.15, 1);
+    transform:rotate(0deg);
+    overflow:hidden;
+  }
+  .wheel-label{
+    position:absolute;
+    top:50%;
+    left:50%;
+    width:50%;
+    height:2px;
+    transform-origin:0 50%;
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    padding-right:14px;
+  }
+  .wheel-label span{
+    font-family:'Roboto Mono', monospace;
+    font-size:12px;
+    font-weight:700;
+    color:#fff;
+    text-shadow:0 1px 2px rgba(0,0,0,0.5);
+    white-space:nowrap;
+  }
+  .wheel-result{
+    font-family:'Roboto Mono', monospace;
+    font-size:15px;
+    font-weight:700;
+    min-height:20px;
+    margin-bottom:16px;
+    color:var(--gold);
+  }
+  .wheel-actions{
+    display:flex;
+    justify-content:center;
+    gap:10px;
+  }
+  .wheel-actions button:disabled{
+    opacity:0.4;
+    cursor:not-allowed;
+  }
 </style>
 </head>
 <body>
@@ -390,7 +502,7 @@
     <div class="field">
       <label>Winner(s)</label>
       <div class="winner-picker" id="winner-picker"></div>
-      <div class="hint">Select more than one for a tie — ties don't count toward personal wins or points, they're tracked separately</div>
+      <div class="hint">Select more than one for a tie — you'll spin a wheel to pick the winner</div>
     </div>
     <div class="field">
       <label for="f-points">Points</label>
@@ -400,6 +512,21 @@
       <button id="add-btn">Add result</button>
     </div>
     <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="wheel-overlay" id="wheel-overlay">
+    <div class="wheel-card">
+      <div class="wheel-title">Tiebreaker Spin</div>
+      <div class="wheel-stage">
+        <div class="wheel-pointer">▼</div>
+        <div class="wheel-disc" id="wheel-disc"></div>
+      </div>
+      <div class="wheel-result" id="wheel-result">&nbsp;</div>
+      <div class="wheel-actions">
+        <button class="secondary" id="wheel-cancel-btn">Cancel</button>
+        <button id="wheel-spin-btn">Spin the Wheel</button>
+      </div>
+    </div>
   </div>
 
   <div class="entry" id="calc-block">
@@ -434,6 +561,12 @@
     <div class="history-list" id="history-body"><div class="loading">Loading log…</div></div>
   </div>
 
+  <div class="test-mode-banner" id="test-mode-banner">🧪 Test Mode is on — nothing you do right now will be saved</div>
+
+  <div class="test-mode-row">
+    <button class="secondary" id="test-mode-btn">Enter Test Mode</button>
+  </div>
+
   <footer>Tap an entry to remove it · Data saved via JSONBin</footer>
 </div>
 
@@ -450,6 +583,8 @@ const NICKNAMES = { 'nate': 'Nathan' };
 
 let state = { players: DEFAULT_PLAYERS.slice(), entries: [] };
 let selectedWinners = [];
+let testMode = false;
+let realStateSnapshot = null;
 
 function todayISO(){
   const d = new Date();
@@ -541,6 +676,9 @@ async function load(){
 }
 
 async function save(){
+  if(testMode){
+    return; // sandboxed — nothing persists while test mode is on
+  }
   try{
     const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
@@ -555,6 +693,32 @@ async function save(){
     }
   }catch(e){
     showMsg('Could not save — try again.');
+  }
+}
+
+function enterTestMode(){
+  realStateSnapshot = JSON.parse(JSON.stringify(state));
+  testMode = true;
+  document.getElementById('test-mode-banner').style.display = 'block';
+  document.getElementById('test-mode-btn').textContent = 'Exit Test Mode (discard changes)';
+}
+
+function exitTestMode(){
+  state = JSON.parse(JSON.stringify(realStateSnapshot));
+  testMode = false;
+  realStateSnapshot = null;
+  document.getElementById('test-mode-banner').style.display = 'none';
+  document.getElementById('test-mode-btn').textContent = 'Enter Test Mode';
+  selectedWinners = [];
+  renderWinnerPicker();
+  render();
+}
+
+function toggleTestMode(){
+  if(testMode){
+    exitTestMode();
+  }else{
+    enterTestMode();
   }
 }
 
@@ -741,6 +905,11 @@ async function addEntry(){
     return;
   }
 
+  if(selectedWinners.length > 1){
+    openWheelModal(selectedWinners, { date, points: num });
+    return;
+  }
+
   state.entries.push({
     id: Date.now(),
     date, players: [...selectedWinners], points: num
@@ -753,6 +922,104 @@ async function addEntry(){
   render();
   await save();
   showMsg('Added.');
+}
+
+const WHEEL_COLORS = ['#b23a2e','#2e6f4e','#2e5f8a','#a9822f','#7a4f9e','#c96b2e'];
+let wheelMode = 'idle';
+let wheelNames = [];
+let wheelWinner = null;
+let wheelDraft = null;
+
+function openWheelModal(names, draft){
+  wheelNames = names.slice();
+  wheelDraft = draft;
+  wheelWinner = null;
+  wheelMode = 'idle';
+  document.getElementById('wheel-result').innerHTML = '&nbsp;';
+  const actionBtn = document.getElementById('wheel-spin-btn');
+  actionBtn.textContent = 'Spin the Wheel';
+  actionBtn.disabled = false;
+  buildWheelDisc(wheelNames);
+  document.getElementById('wheel-overlay').classList.add('open');
+}
+
+function closeWheelModal(){
+  document.getElementById('wheel-overlay').classList.remove('open');
+  wheelDraft = null;
+}
+
+function buildWheelDisc(names){
+  const disc = document.getElementById('wheel-disc');
+  disc.style.transition = 'none';
+  disc.style.transform = 'rotate(0deg)';
+  const n = names.length;
+  const slice = 360 / n;
+
+  const stops = names.map((_, i) => {
+    const color = WHEEL_COLORS[i % WHEEL_COLORS.length];
+    return `${color} ${i*slice}deg ${(i+1)*slice}deg`;
+  });
+  disc.style.background = `conic-gradient(${stops.join(', ')})`;
+
+  disc.innerHTML = '';
+  names.forEach((name, i) => {
+    const center = i*slice + slice/2;
+    const label = document.createElement('div');
+    label.className = 'wheel-label';
+    label.style.transform = `rotate(${center - 90}deg)`;
+    label.innerHTML = `<span>${name}</span>`;
+    disc.appendChild(label);
+  });
+
+  void disc.offsetWidth; // force reflow so the next transform change animates
+}
+
+function spinWheel(){
+  if(wheelMode === 'result'){
+    confirmWheelResult();
+    return;
+  }
+
+  const disc = document.getElementById('wheel-disc');
+  const n = wheelNames.length;
+  const slice = 360 / n;
+  const winnerIndex = Math.floor(Math.random() * n);
+  const centerAngle = winnerIndex * slice + slice / 2;
+  const jitter = (Math.random() - 0.5) * (slice * 0.6);
+  const extraSpins = 5 + Math.floor(Math.random() * 2);
+  const finalRotation = extraSpins * 360 + (360 - centerAngle - jitter);
+
+  document.getElementById('wheel-spin-btn').disabled = true;
+  disc.style.transition = 'transform 4.5s cubic-bezier(0.15, 0.65, 0.15, 1)';
+  disc.style.transform = `rotate(${finalRotation}deg)`;
+
+  wheelWinner = wheelNames[winnerIndex];
+
+  setTimeout(() => {
+    document.getElementById('wheel-result').textContent = `🎉 ${wheelWinner} wins the tiebreaker!`;
+    const actionBtn = document.getElementById('wheel-spin-btn');
+    actionBtn.textContent = 'Confirm & Log';
+    actionBtn.disabled = false;
+    wheelMode = 'result';
+  }, 4600);
+}
+
+async function confirmWheelResult(){
+  if(!wheelWinner || !wheelDraft) return;
+  state.entries.push({
+    id: Date.now(),
+    date: wheelDraft.date,
+    players: [wheelWinner],
+    points: wheelDraft.points
+  });
+  closeWheelModal();
+  render();
+  await save();
+  showMsg(`Added — ${wheelWinner} won the tiebreaker.`);
+
+  selectedWinners = [];
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  document.getElementById('f-points').value = '';
 }
 
 async function removeEntry(id){
@@ -883,6 +1150,9 @@ document.getElementById('add-btn').addEventListener('click', addEntry);
 document.getElementById('bulk-btn').addEventListener('click', bulkImport);
 document.getElementById('calc-btn').addEventListener('click', runCalculator);
 document.getElementById('calc-clear-btn').addEventListener('click', clearCalculator);
+document.getElementById('wheel-cancel-btn').addEventListener('click', closeWheelModal);
+document.getElementById('wheel-spin-btn').addEventListener('click', spinWheel);
+document.getElementById('test-mode-btn').addEventListener('click', toggleTestMode);
 
 load();
 </script>
