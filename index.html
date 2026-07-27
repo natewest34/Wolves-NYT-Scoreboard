@@ -133,6 +133,8 @@
   .row.first .rank{color:var(--gold); font-weight:700;}
   .row.tie-row .name{ font-style:italic; color:var(--red); }
   .row.tie-row .rank{ color:var(--red); }
+  .row.eliminated-row{ opacity:0.55; }
+  .row.eliminated-row .name{ text-decoration:line-through; }
   .name{font-size:19px; font-weight:600;}
   .pts-block{text-align:right;}
   .wins{
@@ -499,6 +501,7 @@
 
   <div class="board">
     <div class="board-title" id="season-title">Season Standings</div>
+    <div class="hint" id="season-hint" style="display:none; margin-bottom:8px;">Struck-through names can no longer catch the leader with the days left this month</div>
     <div id="season-board-body"><div class="loading">Loading standings…</div></div>
   </div>
 
@@ -664,6 +667,16 @@ function seasonLabel(key){
   const [y,m] = key.split('-');
   const d = new Date(Number(y), Number(m)-1, 1);
   return d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+}
+
+function daysRemainingInSeason(){
+  const iso = todayISO();
+  const [y, m, d] = iso.split('-').map(Number);
+  // new Date(y, m, 0) rolls back to the last day of month m (1-indexed),
+  // which correctly handles 28/29/30/31-day months and leap years automatically.
+  const totalDays = new Date(y, m, 0).getDate();
+  const remaining = totalDays - d + 1; // inclusive of today
+  return { totalDays, remaining };
 }
 
 async function load(){
@@ -856,15 +869,17 @@ function renderRecord(){
   document.getElementById('record-value').textContent = `${rec.max} pts — ${parts.join(' · ')}`;
 }
 
-function renderBoardInto(bodyId, ranked, emptyText){
+function renderBoardInto(bodyId, ranked, emptyText, getEliminated){
+  const eliminated = getEliminated || (() => false);
   const body = document.getElementById(bodyId);
   if(ranked.every(r => r.wins === 0 && r.points === 0)){
     body.innerHTML = `<div class="empty">${emptyText}</div>`;
     return;
   }
   body.innerHTML = ranked.map((r, i) => {
+    const isOut = eliminated(r);
     return `
-      <div class="row ${i===0 && !r.isTie ? 'first' : ''} ${r.isTie ? 'tie-row' : ''}">
+      <div class="row ${i===0 && !r.isTie ? 'first' : ''} ${r.isTie ? 'tie-row' : ''} ${isOut ? 'eliminated-row' : ''}">
         <div class="rank">${r.isTie ? '—' : i+1}</div>
         <div class="name">${r.name}</div>
         <div class="pts-block">
@@ -879,7 +894,19 @@ function renderSeasonBoard(){
   const key = seasonKey(todayISO());
   document.getElementById('season-title').textContent = `Season Standings — ${seasonLabel(key)}`;
   const ranked = computeStandings(currentSeasonEntries());
-  renderBoardInto('season-board-body', ranked, 'No results logged yet this month.');
+
+  const contenders = ranked.filter(r => !r.isTie);
+  const leaderWins = contenders.length ? Math.max(...contenders.map(r => r.wins)) : 0;
+  const { remaining } = daysRemainingInSeason();
+
+  const getEliminated = (r) => !r.isTie && (r.wins + remaining) < leaderWins;
+
+  renderBoardInto('season-board-body', ranked, 'No results logged yet this month.', getEliminated);
+
+  const hint = document.getElementById('season-hint');
+  if(hint){
+    hint.style.display = ranked.some(r => getEliminated(r)) ? 'block' : 'none';
+  }
 }
 
 function renderAllTimeBoard(){
