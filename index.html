@@ -770,14 +770,13 @@ function toggleWinner(p){
   });
 }
 
-function computeStandings(entries){
+function rawTotals(entries){
   const t = {};
   state.players.forEach(p => t[p] = { wins:0, points:0 });
   let tie = { wins:0, points:0 };
 
   entries.forEach(e => {
     if(e.players.length > 1){
-      // tie day — tracked separately, does not touch personal totals
       tie.wins += 1;
       tie.points += Number(e.points);
     }else if(e.players.length === 1){
@@ -788,11 +787,34 @@ function computeStandings(entries){
     }
   });
 
-  const rows = Object.entries(t).map(([name, stat]) => ({ name, ...stat, isTie:false }));
+  return { players: t, tie };
+}
+
+function computeStandings(entries, allTimeEntries){
+  const { players: t, tie } = rawTotals(entries);
+  // Tiebreak reference: full history by default, or a specific point-in-time
+  // snapshot when the caller needs a locked-in historical result.
+  const allTime = rawTotals(allTimeEntries || state.entries).players;
+
+  const rows = Object.entries(t).map(([name, stat]) => ({
+    name,
+    wins: stat.wins,
+    points: stat.points,
+    isTie: false,
+    atWins: allTime[name] ? allTime[name].wins : 0,
+    atPoints: allTime[name] ? allTime[name].points : 0
+  }));
   if(tie.wins > 0){
-    rows.push({ name: TIE_LABEL, wins: tie.wins, points: tie.points, isTie:true });
+    rows.push({ name: TIE_LABEL, wins: tie.wins, points: tie.points, isTie:true, atWins:0, atPoints:0 });
   }
-  rows.sort((a,b) => b.wins - a.wins || b.points - a.points);
+
+  // Tiebreak order: 1) wins, 2) points, 3) all-time wins, 4) all-time points
+  rows.sort((a,b) =>
+    b.wins - a.wins ||
+    b.points - a.points ||
+    b.atWins - a.atWins ||
+    b.atPoints - a.atPoints
+  );
   return rows;
 }
 
@@ -812,11 +834,22 @@ function computeTrophyCase(){
 
   seasonKeys.forEach(key => {
     const entries = state.entries.filter(e => seasonKey(e.date) === key);
-    const rows = computeStandings(entries).filter(r => !r.isTie);
+    // Locked-in snapshot: only entries dated through the end of THIS season count
+    // toward the all-time tiebreak, so later data never rewrites a past result.
+    const allTimeThroughSeason = state.entries.filter(e => seasonKey(e.date) <= key);
+    const rows = computeStandings(entries, allTimeThroughSeason).filter(r => !r.isTie);
     if(rows.length === 0) return;
     const top = rows[0];
     if(top.wins === 0) return; // nobody won anything that season
-    const champions = rows.filter(r => r.wins === top.wins && r.points === top.points);
+    // Champions are whoever fully matches the top row across every tiebreak level —
+    // in practice this is almost always exactly one person, since computeStandings
+    // already resolved wins/points/all-time-wins/all-time-points in sorted order.
+    const champions = rows.filter(r =>
+      r.wins === top.wins &&
+      r.points === top.points &&
+      r.atWins === top.atWins &&
+      r.atPoints === top.atPoints
+    );
     champions.forEach(c => {
       if(!seasonsWon[c.name]) seasonsWon[c.name] = [];
       seasonsWon[c.name].push(key);
