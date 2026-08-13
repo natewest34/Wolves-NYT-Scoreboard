@@ -319,6 +319,53 @@
     margin-top:8px;
   }
 
+  /* Tabs */
+  .tabs{
+    display:flex;
+    margin-top:18px;
+    border:1px solid var(--ink);
+  }
+  .tab{
+    flex:1;
+    text-align:center;
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    padding:11px 6px;
+    cursor:pointer;
+    color:var(--ink-soft);
+  }
+  .tab.active{
+    background:var(--ink);
+    color:var(--paper);
+  }
+  .tab:first-child{border-right:1px solid var(--ink);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  /* Submit screen */
+  .submit-status{
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-bottom:14px;
+    line-height:1.7;
+  }
+  .submit-status .done{color:var(--gold);}
+  .who-picker{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-bottom:16px;
+  }
+  .submit-preview{
+    margin-top:12px;
+    border-top:1px solid var(--paper-line);
+    padding-top:12px;
+  }
+  .submit-preview .calc-error{margin-bottom:6px;}
+
   /* History */
   .history{margin-top:34px;}
   .history-list{max-height:280px; overflow-y:auto;}
@@ -499,6 +546,40 @@
     <div class="record-value" id="record-value">—</div>
   </div>
 
+  <div class="tabs">
+    <div class="tab active" data-tab="submit" onclick="switchTab('submit')">Submit Score</div>
+    <div class="tab" data-tab="standings" onclick="switchTab('standings')">Standings</div>
+  </div>
+
+  <div class="panel active" id="panel-submit">
+    <div class="entry" style="margin-top:20px;">
+      <div class="entry-title">Enter Today's Score</div>
+      <div class="submit-status" id="submit-status">Loading…</div>
+      <div class="field">
+        <label>Who are you?</label>
+        <div class="who-picker" id="who-picker"></div>
+      </div>
+      <div id="submit-form-body" style="display:none;">
+        <div class="field">
+          <label for="f-submit-text">Paste your Wordle and/or Connections share text</label>
+          <textarea id="f-submit-text" rows="6" style="width:100%; box-sizing:border-box; resize:vertical; font-family:'Roboto Mono', monospace; font-size:14px; padding:9px 8px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
+        </div>
+        <div class="hint" style="margin-bottom:10px;">Or skip pasting and just type your total points:</div>
+        <div class="field">
+          <label for="f-submit-points">Points (optional if you pasted above)</label>
+          <input type="number" id="f-submit-points" placeholder="e.g. 6" step="1">
+        </div>
+        <div class="submit-preview" id="submit-preview"></div>
+        <div class="add-row">
+          <button id="submit-score-btn">Submit Score</button>
+        </div>
+        <div class="msg" id="submit-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-standings">
+
   <div class="board">
     <div class="board-title" id="season-title">Season Standings</div>
     <div class="hint" id="season-hint" style="display:none; margin-bottom:8px;">Struck-through names can no longer catch the leader with the days left this month</div>
@@ -589,24 +670,61 @@
     <button class="secondary" id="test-mode-btn">Enter Test Mode</button>
   </div>
 
-  <footer>Tap an entry to remove it · Data saved via JSONBin</footer>
+  </div>
+
+  <footer>Tap an entry to remove it · Scores sync in the background via GitHub Actions</footer>
 </div>
 
 <script>
-// ---- JSONBin config: fill these in after you create your bin ----
+// ---- JSONBin config ----
+// No master key here anymore — these bins must be set to PUBLIC in your
+// JSONBin dashboard (Bin settings → Privacy → Public) so reads work without
+// a key. All WRITES go through GitHub Actions instead (see below).
 const JSONBIN_BIN_ID = '6a5da882da38895dfe7475d3';
-const JSONBIN_API_KEY = '$2a$10$xxQoEgOVxbW6G200N8HNse4gX/XCiTI9QPXiJFCUTT0e5tjs0XTla';
 const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+
+const SUBMISSIONS_BIN_ID = 'PASTE_YOUR_SUBMISSIONS_BIN_ID_HERE';
+const SUBMISSIONS_URL = `https://api.jsonbin.io/v3/b/${SUBMISSIONS_BIN_ID}`;
+
+// ---- GitHub write-dispatch config ----
+// This token can ONLY trigger the "Apply Write" Action in this one repo —
+// it has no access to your repo's code/contents and no access to JSONBin.
+// Create it at github.com/settings/personal-access-tokens/new:
+//   Repository access: only this repo
+//   Permissions: Actions = Read and write (nothing else)
+const GITHUB_OWNER = 'natewest34';
+const GITHUB_REPO = 'Wolves-NYT-Scoreboard';
+const GITHUB_DISPATCH_TOKEN = 'PASTE_YOUR_FINE_GRAINED_PAT_HERE';
 // -------------------------------------------------------------
+
+async function dispatchWrite(action, payload){
+  try{
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/dispatches`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `Bearer ${GITHUB_DISPATCH_TOKEN}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ event_type: 'nyt-write', client_payload: { action, payload } })
+    });
+    return res.ok;
+  }catch(e){
+    return false;
+  }
+}
 
 const DEFAULT_PLAYERS = ['Tanner','Thomas','Nathan','Jake','Michaela'];
 const TIE_LABEL = 'Ties';
 const NICKNAMES = { 'nate': 'Nathan' };
 
-let state = { players: DEFAULT_PLAYERS.slice(), entries: [] };
+let state = { players: DEFAULT_PLAYERS.slice(), entries: [], finalizedDates: [] };
+let subState = { submissions: [] };
 let selectedWinners = [];
 let testMode = false;
 let realStateSnapshot = null;
+let selectedSubmitter = null;
 
 function todayISO(){
   const d = new Date();
@@ -684,9 +802,7 @@ async function load(){
   document.getElementById('f-date').value = todayISO();
 
   try{
-    const res = await fetch(`${JSONBIN_URL}/latest`, {
-      headers: { 'X-Master-Key': JSONBIN_API_KEY }
-    });
+    const res = await fetch(`${JSONBIN_URL}/latest`);
     if(res.ok){
       const data = await res.json();
       const parsed = data.record;
@@ -697,39 +813,44 @@ async function load(){
           const players = e.players || (e.player ? [e.player] : []);
           return { id:e.id, date:e.date, players, points:e.points };
         });
+        if(!state.finalizedDates) state.finalizedDates = [];
       }
     }
   }catch(e){
     // couldn't reach JSONBin — using defaults for now
   }
 
+  try{
+    const res2 = await fetch(`${SUBMISSIONS_URL}/latest`);
+    if(res2.ok){
+      const data2 = await res2.json();
+      if(data2.record && Array.isArray(data2.record.submissions)){
+        subState = data2.record;
+      }
+    }
+  }catch(e){
+    // couldn't reach submissions bin — using empty list for now
+  }
+
   renderWinnerPicker();
+  renderSubmitPicker();
   render();
 }
 
-async function save(){
-  if(testMode){
-    return; // sandboxed — nothing persists while test mode is on
-  }
-  try{
-    const res = await fetch(JSONBIN_URL, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': JSONBIN_API_KEY
-      },
-      body: JSON.stringify(state)
-    });
-    if(!res.ok){
-      showMsg('Could not save — check your JSONBin config.');
-    }
-  }catch(e){
-    showMsg('Could not save — try again.');
-  }
+function markFinalized(date){
+  if(!state.finalizedDates) state.finalizedDates = [];
+  if(!state.finalizedDates.includes(date)) state.finalizedDates.push(date);
 }
+
+function submissionsForDate(date){
+  return subState.submissions.filter(s => s.date === date);
+}
+
+let realSubStateSnapshot = null;
 
 function enterTestMode(){
   realStateSnapshot = JSON.parse(JSON.stringify(state));
+  realSubStateSnapshot = JSON.parse(JSON.stringify(subState));
   testMode = true;
   document.getElementById('test-mode-banner').style.display = 'block';
   document.getElementById('test-mode-btn').textContent = 'Exit Test Mode (discard changes)';
@@ -737,12 +858,17 @@ function enterTestMode(){
 
 function exitTestMode(){
   state = JSON.parse(JSON.stringify(realStateSnapshot));
+  subState = JSON.parse(JSON.stringify(realSubStateSnapshot));
   testMode = false;
   realStateSnapshot = null;
+  realSubStateSnapshot = null;
   document.getElementById('test-mode-banner').style.display = 'none';
   document.getElementById('test-mode-btn').textContent = 'Enter Test Mode';
   selectedWinners = [];
+  selectedSubmitter = null;
   renderWinnerPicker();
+  renderSubmitPicker();
+  document.getElementById('submit-form-body').style.display = 'none';
   render();
 }
 
@@ -1015,18 +1141,20 @@ async function addEntry(){
     return;
   }
 
+  const winners = [...selectedWinners];
   state.entries.push({
     id: Date.now(),
-    date, players: [...selectedWinners], points: num
+    date, players: winners, points: num
   });
+  markFinalized(date);
 
   document.getElementById('f-points').value = '';
   selectedWinners = [];
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
 
   render();
-  await save();
-  showMsg('Added.');
+  if(!testMode) await dispatchWrite('add-entry', { date, players: winners, points: num });
+  showMsg('Added — syncing in the background, may take up to a minute.');
 }
 
 const WHEEL_COLORS = ['#b23a2e','#2e6f4e','#2e5f8a','#a9822f','#7a4f9e','#c96b2e'];
@@ -1117,10 +1245,11 @@ async function confirmWheelResult(){
     players: [wheelWinner],
     points: wheelDraft.points
   });
+  markFinalized(wheelDraft.date);
   closeWheelModal();
   render();
-  await save();
-  showMsg(`Added — ${wheelWinner} won the tiebreaker.`);
+  if(!testMode) await dispatchWrite('add-entry', { date: wheelDraft.date, players: [wheelWinner], points: wheelDraft.points });
+  showMsg(`Added — ${wheelWinner} won the tiebreaker. Syncing in the background.`);
 
   selectedWinners = [];
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
@@ -1130,7 +1259,7 @@ async function confirmWheelResult(){
 async function removeEntry(id){
   state.entries = state.entries.filter(e => e.id !== id);
   render();
-  await save();
+  if(!testMode) await dispatchWrite('remove-entry', { id });
 }
 
 function parseWordleScore(text){
@@ -1231,17 +1360,18 @@ async function bulkImport(){
     if(!parsed){ return; }
     if(parsed.error){ errors.push(parsed.error); return; }
     state.entries.push({ id: Date.now() + added, date: parsed.date, players: parsed.players, points: parsed.points });
+    markFinalized(parsed.date);
     added++;
   });
 
   renderWinnerPicker();
   render();
-  await save();
+  if(!testMode) await dispatchWrite('bulk-import', { lines });
 
   if(errors.length){
-    showBulkMsg(`Added ${added}. ${errors.length} line(s) skipped — check formatting.`);
+    showBulkMsg(`Added ${added} locally. ${errors.length} line(s) skipped — check formatting. Syncing in the background.`);
   }else{
-    showBulkMsg(`Added ${added} result${added===1?'':'s'}.`);
+    showBulkMsg(`Added ${added} result${added===1?'':'s'} — syncing in the background.`);
     document.getElementById('f-bulk').value = '';
   }
 }
@@ -1251,6 +1381,145 @@ function showBulkMsg(text){
   m.textContent = text;
 }
 
+// ---- Submit Score tab ----
+
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.getElementById('panel-submit').classList.toggle('active', name === 'submit');
+  document.getElementById('panel-standings').classList.toggle('active', name === 'standings');
+}
+
+function renderSubmitPicker(){
+  const el = document.getElementById('who-picker');
+  el.innerHTML = state.players.map(p => `<div class="chip" data-player="${p}" onclick="selectSubmitter('${p}')">${p}</div>`).join('');
+  renderSubmitStatus();
+}
+
+function renderSubmitStatus(){
+  const el = document.getElementById('submit-status');
+  const today = todayISO();
+  const subsToday = submissionsForDate(today);
+  const submittedNames = new Set(subsToday.map(s => s.player));
+  const finalized = (state.finalizedDates || []).includes(today);
+  const lines = state.players.map(p => submittedNames.has(p) ? `<span class="done">✓ ${p}</span>` : `${p} — waiting`);
+  el.innerHTML = lines.join(' &nbsp;·&nbsp; ') + (finalized ? '<br><br>Today\'s winner has been calculated and logged.' : '');
+
+  document.querySelectorAll('#who-picker .chip').forEach(c => {
+    c.classList.toggle('selected', c.dataset.player === selectedSubmitter);
+  });
+}
+
+function selectSubmitter(player){
+  selectedSubmitter = player;
+  document.querySelectorAll('#who-picker .chip').forEach(c => {
+    c.classList.toggle('selected', c.dataset.player === player);
+  });
+  document.getElementById('submit-form-body').style.display = 'block';
+
+  // Pre-fill if this player already submitted today, so re-tapping their
+  // name lets them review/edit rather than starting blank.
+  const existing = submissionsForDate(todayISO()).find(s => s.player === player);
+  document.getElementById('f-submit-text').value = existing ? existing.raw || '' : '';
+  document.getElementById('f-submit-points').value = existing && !existing.raw ? existing.totalPoints : '';
+  updateSubmitPreview();
+}
+
+function updateSubmitPreview(){
+  const text = document.getElementById('f-submit-text').value;
+  const manualPoints = document.getElementById('f-submit-points').value;
+  const previewEl = document.getElementById('submit-preview');
+
+  if(text.trim()){
+    const wordle = parseWordleScore(text);
+    const connections = parseConnectionsScore(text);
+    if(!wordle && !connections){
+      previewEl.innerHTML = `<div class="calc-error">Couldn't recognize a Wordle or Connections result in that text — you can type your points instead below.</div>`;
+      return;
+    }
+    let total = 0;
+    let html = '';
+    if(wordle){
+      total += wordle.points;
+      const detail = wordle.solved ? `solved in ${wordle.guesses}/6` : `not solved (X/6)`;
+      html += `<div class="calc-line"><span>Wordle (${detail})</span><span>${wordle.points} pt${wordle.points===1?'':'s'}</span></div>`;
+    }
+    if(connections){
+      total += connections.points;
+      const detail = connections.solved ? `solved, ${connections.mistakes} mistake${connections.mistakes===1?'':'s'}` : `not solved`;
+      html += `<div class="calc-line"><span>Connections (${detail})</span><span>${connections.points} pt${connections.points===1?'':'s'}</span></div>`;
+    }
+    html += `<div class="calc-total"><span>Total</span><span>${total} pt${total===1?'':'s'}</span></div>`;
+    previewEl.innerHTML = html;
+  }else if(manualPoints !== ''){
+    previewEl.innerHTML = `<div class="calc-total"><span>Total</span><span>${Number(manualPoints)} pt${Number(manualPoints)===1?'':'s'}</span></div>`;
+  }else{
+    previewEl.innerHTML = '';
+  }
+}
+
+async function submitScore(){
+  if(!selectedSubmitter){
+    showSubmitMsg('Tap your name first.');
+    return;
+  }
+  const text = document.getElementById('f-submit-text').value;
+  const manualPoints = document.getElementById('f-submit-points').value;
+
+  let wordle = null, connections = null, total = null;
+  if(text.trim()){
+    wordle = parseWordleScore(text);
+    connections = parseConnectionsScore(text);
+    if(!wordle && !connections){
+      showSubmitMsg('Could not read that paste — try typing your points instead.');
+      return;
+    }
+    total = (wordle ? wordle.points : 0) + (connections ? connections.points : 0);
+  }else if(manualPoints !== ''){
+    total = Number(manualPoints);
+    if(Number.isNaN(total)){
+      showSubmitMsg('Points must be a number.');
+      return;
+    }
+  }else{
+    showSubmitMsg('Paste your results or enter your points.');
+    return;
+  }
+
+  const date = todayISO();
+  if((state.finalizedDates || []).includes(date)){
+    showSubmitMsg('Today has already been finalized — see the admin form to make changes.');
+    return;
+  }
+
+  const entry = {
+    date,
+    player: selectedSubmitter,
+    raw: text.trim() || null,
+    wordlePoints: wordle ? wordle.points : null,
+    connectionsPoints: connections ? connections.points : null,
+    totalPoints: total,
+    submittedAt: new Date().toISOString()
+  };
+  const idx = subState.submissions.findIndex(s => s.date === date && s.player === selectedSubmitter);
+  if(idx >= 0) subState.submissions[idx] = entry; else subState.submissions.push(entry);
+
+  renderSubmitStatus();
+  if(!testMode){
+    await dispatchWrite('submit-score', {
+      date, player: selectedSubmitter, raw: entry.raw,
+      wordlePoints: entry.wordlePoints, connectionsPoints: entry.connectionsPoints,
+      totalPoints: entry.totalPoints
+    });
+  }
+  showSubmitMsg('Score submitted! May take up to a minute to show for everyone.');
+}
+
+function showSubmitMsg(text){
+  const m = document.getElementById('submit-msg');
+  m.textContent = text;
+  setTimeout(() => { if(m.textContent === text) m.textContent = ''; }, 2500);
+}
+
 document.getElementById('add-btn').addEventListener('click', addEntry);
 document.getElementById('bulk-btn').addEventListener('click', bulkImport);
 document.getElementById('calc-btn').addEventListener('click', runCalculator);
@@ -1258,6 +1527,9 @@ document.getElementById('calc-clear-btn').addEventListener('click', clearCalcula
 document.getElementById('wheel-cancel-btn').addEventListener('click', closeWheelModal);
 document.getElementById('wheel-spin-btn').addEventListener('click', spinWheel);
 document.getElementById('test-mode-btn').addEventListener('click', toggleTestMode);
+document.getElementById('submit-score-btn').addEventListener('click', submitScore);
+document.getElementById('f-submit-text').addEventListener('input', updateSubmitPreview);
+document.getElementById('f-submit-points').addEventListener('input', updateSubmitPreview);
 
 load();
 </script>
