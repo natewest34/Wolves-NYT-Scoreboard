@@ -20,5 +20,4 @@ jobs:
         env:
           JSONBIN_API_KEY: ${{ secrets.JSONBIN_API_KEY }}
           JSONBIN_BIN_ID: ${{ secrets.JSONBIN_BIN_ID }}
-          SUBMISSIONS_BIN_ID: ${{ secrets.SUBMISSIONS_BIN_ID }}
         run: node scripts/finalize-day.mjs

@@ -675,50 +675,68 @@
   <footer>Tap an entry to remove it · Scores sync in the background via GitHub Actions</footer>
 </div>
 
+<script src="config.js"></script>
 <script>
-// ---- JSONBin config ----
-const JSONBIN_API_KEY = '$2a$10$xxQoEgOVxbW6G200N8HNse4gX/XCiTI9QPXiJFCUTT0e5tjs0XTla';
-const JSONBIN_BIN_ID = '6a5da882da38895dfe7475d3';
-const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${6a5da882da38895dfe7475d3}`;
+// JSONBIN_API_KEY, JSONBIN_BIN_ID, and DEFAULT_PLAYERS come from config.js
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
-const SUBMISSIONS_BIN_ID = '6a7e4258da38895dfee1cccd';
-const SUBMISSIONS_URL = `https://api.jsonbin.io/v3/b/${6a7e4258da38895dfee1cccd}`;
-
-// ---- GitHub write-dispatch config ----
-// This token can ONLY trigger the "Apply Write" Action in this one repo —
-// it has no access to your repo's code/contents and no access to JSONBin.
-// Create it at github.com/settings/personal-access-tokens/new:
-//   Repository access: only this repo
-//   Permissions: Actions = Read and write (nothing else)
-const GITHUB_OWNER = 'natewest34';
-const GITHUB_REPO = 'Wolves-NYT-Scoreboard';
-const GITHUB_DISPATCH_TOKEN = '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';
-// -------------------------------------------------------------
-
-async function dispatchWrite(action, payload){
-  try{
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/dispatches`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/vnd.github+json',
-        'Authorization': `Bearer ${GITHUB_DISPATCH_TOKEN}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ event_type: 'nyt-write', client_payload: { action, payload } })
-    });
-    return res.ok;
-  }catch(e){
-    return false;
-  }
-}
-
-const DEFAULT_PLAYERS = ['Tanner','Thomas','Nathan','Jake','Michaela'];
 const TIE_LABEL = 'Ties';
 const NICKNAMES = { 'nate': 'Nathan' };
 
-let state = { players: DEFAULT_PLAYERS.slice(), entries: [], finalizedDates: [] };
-let subState = { submissions: [] };
+async function save(){
+  if(testMode) return; // sandboxed — nothing persists while test mode is on
+  try{
+    const res = await fetch(JSONBIN_URL, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_API_KEY
+      },
+      body: JSON.stringify(state)
+    });
+    if(!res.ok){
+      showMsg('Could not save — check your JSONBin config.');
+    }
+  }catch(e){
+    showMsg('Could not save — try again.');
+  }
+}
+
+// Ported from scripts/finalize.mjs — keep the two copies in sync.
+// A day finalizes once everyone has submitted, or once the day has passed
+// (that second case is a backstop the nightly Action also checks, in case
+// nobody opens the site the next day).
+function finalizeCheck(){
+  const today = todayISO();
+  const dates = new Set(state.submissions.map(s => s.date));
+  let touched = false;
+
+  dates.forEach(date => {
+    if(state.finalizedDates.includes(date)) return;
+
+    const subs = submissionsForDate(date);
+    const isPast = date < today;
+    const allIn = subs.length > 0 && subs.length >= state.players.length;
+    if(!isPast && !allIn) return;
+
+    state.finalizedDates.push(date);
+    touched = true;
+    if(subs.length === 0) return;
+
+    const max = Math.max(...subs.map(s => s.totalPoints));
+    const winners = subs.filter(s => s.totalPoints === max).map(s => s.player);
+    state.entries.push({
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      date,
+      players: winners,
+      points: max
+    });
+  });
+
+  return touched;
+}
+
+let state = { players: DEFAULT_PLAYERS.slice(), entries: [], submissions: [], finalizedDates: [] };
 let selectedWinners = [];
 let testMode = false;
 let realStateSnapshot = null;
@@ -813,6 +831,7 @@ async function load(){
           const players = e.players || (e.player ? [e.player] : []);
           return { id:e.id, date:e.date, players, points:e.points };
         });
+        if(!state.submissions) state.submissions = [];
         if(!state.finalizedDates) state.finalizedDates = [];
       }
     }
@@ -820,19 +839,10 @@ async function load(){
     // couldn't reach JSONBin — using defaults for now
   }
 
-  try{
-    const res2 = await fetch(`${SUBMISSIONS_URL}/latest`, {
-      headers: { 'X-Master-Key': JSONBIN_API_KEY }
-    });
-    if(res2.ok){
-      const data2 = await res2.json();
-      if(data2.record && Array.isArray(data2.record.submissions)){
-        subState = data2.record;
-      }
-    }
-  }catch(e){
-    // couldn't reach submissions bin — using empty list for now
-  }
+  // Catch up on any day that finished since the last time anyone opened the
+  // site (the nightly Action also does this, but this covers the gap too).
+  const touched = finalizeCheck();
+  if(touched) await save();
 
   renderWinnerPicker();
   renderSubmitPicker();
@@ -845,14 +855,11 @@ function markFinalized(date){
 }
 
 function submissionsForDate(date){
-  return subState.submissions.filter(s => s.date === date);
+  return state.submissions.filter(s => s.date === date);
 }
-
-let realSubStateSnapshot = null;
 
 function enterTestMode(){
   realStateSnapshot = JSON.parse(JSON.stringify(state));
-  realSubStateSnapshot = JSON.parse(JSON.stringify(subState));
   testMode = true;
   document.getElementById('test-mode-banner').style.display = 'block';
   document.getElementById('test-mode-btn').textContent = 'Exit Test Mode (discard changes)';
@@ -860,10 +867,8 @@ function enterTestMode(){
 
 function exitTestMode(){
   state = JSON.parse(JSON.stringify(realStateSnapshot));
-  subState = JSON.parse(JSON.stringify(realSubStateSnapshot));
   testMode = false;
   realStateSnapshot = null;
-  realSubStateSnapshot = null;
   document.getElementById('test-mode-banner').style.display = 'none';
   document.getElementById('test-mode-btn').textContent = 'Enter Test Mode';
   selectedWinners = [];
@@ -1155,8 +1160,8 @@ async function addEntry(){
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
 
   render();
-  if(!testMode) await dispatchWrite('add-entry', { date, players: winners, points: num });
-  showMsg('Added — syncing in the background, may take up to a minute.');
+  if(!testMode) await save();
+  showMsg('Added.');
 }
 
 const WHEEL_COLORS = ['#b23a2e','#2e6f4e','#2e5f8a','#a9822f','#7a4f9e','#c96b2e'];
@@ -1250,8 +1255,8 @@ async function confirmWheelResult(){
   markFinalized(wheelDraft.date);
   closeWheelModal();
   render();
-  if(!testMode) await dispatchWrite('add-entry', { date: wheelDraft.date, players: [wheelWinner], points: wheelDraft.points });
-  showMsg(`Added — ${wheelWinner} won the tiebreaker. Syncing in the background.`);
+  if(!testMode) await save();
+  showMsg(`Added — ${wheelWinner} won the tiebreaker.`);
 
   selectedWinners = [];
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
@@ -1261,7 +1266,7 @@ async function confirmWheelResult(){
 async function removeEntry(id){
   state.entries = state.entries.filter(e => e.id !== id);
   render();
-  if(!testMode) await dispatchWrite('remove-entry', { id });
+  if(!testMode) await save();
 }
 
 function parseWordleScore(text){
@@ -1368,12 +1373,12 @@ async function bulkImport(){
 
   renderWinnerPicker();
   render();
-  if(!testMode) await dispatchWrite('bulk-import', { lines });
+  if(!testMode) await save();
 
   if(errors.length){
-    showBulkMsg(`Added ${added} locally. ${errors.length} line(s) skipped — check formatting. Syncing in the background.`);
+    showBulkMsg(`Added ${added}. ${errors.length} line(s) skipped — check formatting.`);
   }else{
-    showBulkMsg(`Added ${added} result${added===1?'':'s'} — syncing in the background.`);
+    showBulkMsg(`Added ${added} result${added===1?'':'s'}.`);
     document.getElementById('f-bulk').value = '';
   }
 }
@@ -1502,18 +1507,18 @@ async function submitScore(){
     totalPoints: total,
     submittedAt: new Date().toISOString()
   };
-  const idx = subState.submissions.findIndex(s => s.date === date && s.player === selectedSubmitter);
-  if(idx >= 0) subState.submissions[idx] = entry; else subState.submissions.push(entry);
+  const idx = state.submissions.findIndex(s => s.date === date && s.player === selectedSubmitter);
+  if(idx >= 0) state.submissions[idx] = entry; else state.submissions.push(entry);
+
+  const touched = finalizeCheck();
 
   renderSubmitStatus();
-  if(!testMode){
-    await dispatchWrite('submit-score', {
-      date, player: selectedSubmitter, raw: entry.raw,
-      wordlePoints: entry.wordlePoints, connectionsPoints: entry.connectionsPoints,
-      totalPoints: entry.totalPoints
-    });
-  }
-  showSubmitMsg('Score submitted! May take up to a minute to show for everyone.');
+  render();
+  if(!testMode) await save();
+
+  showSubmitMsg(touched
+    ? "Score submitted! Today's winner has been calculated."
+    : 'Score submitted!');
 }
 
 function showSubmitMsg(text){

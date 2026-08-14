@@ -1,15 +1,13 @@
-// Small wrapper around the JSONBin v3 API. Used by both finalize-day.mjs
-// and apply-write.mjs so the two scripts stay in sync.
+// Small wrapper around the JSONBin v3 API — single bin only.
 
-export function binUrls() {
-  const { JSONBIN_API_KEY, JSONBIN_BIN_ID, SUBMISSIONS_BIN_ID } = process.env;
-  if (!JSONBIN_API_KEY || !JSONBIN_BIN_ID || !SUBMISSIONS_BIN_ID) {
-    throw new Error('Missing one of JSONBIN_API_KEY / JSONBIN_BIN_ID / SUBMISSIONS_BIN_ID env vars.');
+export function binUrl() {
+  const { JSONBIN_API_KEY, JSONBIN_BIN_ID } = process.env;
+  if (!JSONBIN_API_KEY || !JSONBIN_BIN_ID) {
+    throw new Error('Missing JSONBIN_API_KEY or JSONBIN_BIN_ID env vars.');
   }
   return {
     apiKey: JSONBIN_API_KEY,
-    mainUrl: `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`,
-    submissionsUrl: `https://api.jsonbin.io/v3/b/${SUBMISSIONS_BIN_ID}`
+    url: `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`
   };
 }
 
@@ -32,11 +30,7 @@ export async function putBin(url, apiKey, record) {
 export function normalizeState(state) {
   if (!state.players) state.players = ['Tanner', 'Thomas', 'Nathan', 'Jake', 'Michaela'];
   if (!state.entries) state.entries = [];
+  if (!state.submissions) state.submissions = [];
   if (!state.finalizedDates) state.finalizedDates = [];
   return state;
-}
-
-export function normalizeSubState(subState) {
-  if (!subState.submissions) subState.submissions = [];
-  return subState;
 }
