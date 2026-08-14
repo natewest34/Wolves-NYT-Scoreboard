@@ -552,6 +552,11 @@
   </div>
 
   <div class="panel active" id="panel-submit">
+    <div class="record" id="today-leader-block">
+      <div class="record-label">Leading Today</div>
+      <div class="record-value" id="today-leader-value">—</div>
+    </div>
+
     <div class="entry" style="margin-top:20px;">
       <div class="entry-title">Enter Today's Score</div>
       <div class="submit-status" id="submit-status">Loading…</div>
@@ -1414,6 +1419,20 @@ function renderSubmitStatus(){
   document.querySelectorAll('#who-picker .chip').forEach(c => {
     c.classList.toggle('selected', c.dataset.player === selectedSubmitter);
   });
+
+  renderTodayLeader(subsToday, finalized);
+}
+
+function renderTodayLeader(subsToday, finalized){
+  const valueEl = document.getElementById('today-leader-value');
+  if(!subsToday || subsToday.length === 0){
+    valueEl.textContent = 'No scores submitted yet today.';
+    return;
+  }
+  const max = Math.max(...subsToday.map(s => s.totalPoints));
+  const leaders = subsToday.filter(s => s.totalPoints === max).map(s => s.player);
+  const tag = finalized ? ' (final)' : subsToday.length < state.players.length ? ` — ${subsToday.length}/${state.players.length} in so far` : '';
+  valueEl.textContent = `${leaders.join(' & ')} — ${max} pt${max===1?'':'s'}${tag}`;
 }
 
 function selectSubmitter(player){
