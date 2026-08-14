@@ -677,14 +677,12 @@
 
 <script>
 // ---- JSONBin config ----
-// No master key here anymore — these bins must be set to PUBLIC in your
-// JSONBin dashboard (Bin settings → Privacy → Public) so reads work without
-// a key. All WRITES go through GitHub Actions instead (see below).
+const JSONBIN_API_KEY = '$2a$10$xxQoEgOVxbW6G200N8HNse4gX/XCiTI9QPXiJFCUTT0e5tjs0XTla';
 const JSONBIN_BIN_ID = '6a5da882da38895dfe7475d3';
-const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${6a5da882da38895dfe7475d3}`;
 
-const SUBMISSIONS_BIN_ID = 'PASTE_YOUR_SUBMISSIONS_BIN_ID_HERE';
-const SUBMISSIONS_URL = `https://api.jsonbin.io/v3/b/${SUBMISSIONS_BIN_ID}`;
+const SUBMISSIONS_BIN_ID = '6a7e4258da38895dfee1cccd';
+const SUBMISSIONS_URL = `https://api.jsonbin.io/v3/b/${6a7e4258da38895dfee1cccd}`;
 
 // ---- GitHub write-dispatch config ----
 // This token can ONLY trigger the "Apply Write" Action in this one repo —
@@ -694,7 +692,7 @@ const SUBMISSIONS_URL = `https://api.jsonbin.io/v3/b/${SUBMISSIONS_BIN_ID}`;
 //   Permissions: Actions = Read and write (nothing else)
 const GITHUB_OWNER = 'natewest34';
 const GITHUB_REPO = 'Wolves-NYT-Scoreboard';
-const GITHUB_DISPATCH_TOKEN = 'PASTE_YOUR_FINE_GRAINED_PAT_HERE';
+const GITHUB_DISPATCH_TOKEN = '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';
 // -------------------------------------------------------------
 
 async function dispatchWrite(action, payload){
@@ -802,7 +800,9 @@ async function load(){
   document.getElementById('f-date').value = todayISO();
 
   try{
-    const res = await fetch(`${JSONBIN_URL}/latest`);
+    const res = await fetch(`${JSONBIN_URL}/latest`, {
+      headers: { 'X-Master-Key': JSONBIN_API_KEY }
+    });
     if(res.ok){
       const data = await res.json();
       const parsed = data.record;
@@ -821,7 +821,9 @@ async function load(){
   }
 
   try{
-    const res2 = await fetch(`${SUBMISSIONS_URL}/latest`);
+    const res2 = await fetch(`${SUBMISSIONS_URL}/latest`, {
+      headers: { 'X-Master-Key': JSONBIN_API_KEY }
+    });
     if(res2.ok){
       const data2 = await res2.json();
       if(data2.record && Array.isArray(data2.record.submissions)){

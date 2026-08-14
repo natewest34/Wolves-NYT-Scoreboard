@@ -3,9 +3,9 @@
 // it only holds a token that can trigger this workflow. Everything here is
 // treated as untrusted input and validated before touching JSONBin.
 
-import { binUrls, getBin, putBin, normalizeState, normalizeSubState } from './lib/jsonbin.mjs';
-import { finalizeCheck } from './lib/finalize.mjs';
-import { parseBulkLine } from './lib/parse.mjs';
+import { binUrls, getBin, putBin, normalizeState, normalizeSubState } from './jsonbin.mjs';
+import { finalizeCheck } from './finalize.mjs';
+import { parseBulkLine } from './parse.mjs';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_POINTS = 20;

@@ -1,8 +1,8 @@
 // Runs once daily via .github/workflows/finalize-day.yml.
 // Scores any unfinalized past day, even if nobody opens the site that morning.
 
-import { binUrls, getBin, putBin, normalizeState, normalizeSubState } from './lib/jsonbin.mjs';
-import { finalizeCheck } from './lib/finalize.mjs';
+import { binUrls, getBin, putBin, normalizeState, normalizeSubState } from './jsonbin.mjs';
+import { finalizeCheck } from './finalize.mjs';
 
 async function run() {
   const { apiKey, mainUrl, submissionsUrl } = binUrls();
