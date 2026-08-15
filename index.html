@@ -380,6 +380,53 @@
   }
   .submit-preview .calc-error{margin-bottom:6px;}
 
+  /* Today's Results */
+  .result-card{
+    border-bottom:1px solid var(--paper-line);
+    padding:12px 2px;
+  }
+  .result-card:first-child{
+    padding-top:2px;
+  }
+  .result-card:last-child{
+    border-bottom:none;
+    padding-bottom:2px;
+  }
+  .result-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    gap:10px;
+  }
+  .result-name{
+    font-size:17px;
+    font-weight:600;
+  }
+  .result-card.first-place .result-name{
+    color:var(--gold);
+  }
+  .result-total{
+    font-family:'Roboto Mono', monospace;
+    font-size:15px;
+    font-weight:700;
+    white-space:nowrap;
+  }
+  .result-breakdown{
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    display:flex;
+    gap:14px;
+    margin-top:3px;
+  }
+  .result-emoji{
+    margin:8px 0 0;
+    font-family:'Roboto Mono', monospace;
+    font-size:14px;
+    line-height:1.35;
+    white-space:pre;
+  }
+
   /* History */
   .history{margin-top:34px;}
   .history-list{max-height:280px; overflow-y:auto;}
@@ -566,12 +613,7 @@
   </div>
 
   <div class="panel active" id="panel-submit">
-    <div class="record" id="today-leader-block">
-      <div class="record-label">Leading Today</div>
-      <div class="record-value" id="today-leader-value">—</div>
-    </div>
-
-    <div class="entry" style="margin-top:20px;">
+    <div class="entry">
       <div class="entry-title">Enter Today's Score</div>
       <div class="submit-status" id="submit-status">Loading…</div>
       <div class="field">
@@ -594,6 +636,11 @@
         </div>
         <div class="msg" id="submit-msg"></div>
       </div>
+    </div>
+
+    <div class="entry" id="today-results-block" style="display:none;">
+      <div class="entry-title">Today's Results</div>
+      <div id="today-results-body"></div>
     </div>
   </div>
 
@@ -687,6 +734,11 @@ const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
 const TIE_LABEL = 'Ties';
 const NICKNAMES = { 'nate': 'Nathan' };
+// Matches a line made up entirely of the colored/black/white square emoji
+// used in Wordle (⬛⬜🟩🟨 or the colorblind 🟧🟦 variant) and Connections
+// (🟨🟩🟦🟪) share-text pastes, so we can pull the little grid back out
+// of someone's raw paste for display.
+const SQUARE_LINE_RE = /^[\u2B1B\u2B1C\u{1F7E5}-\u{1F7EB}\uFE0F]+$/u;
 
 async function save(){
   if(testMode) return; // sandboxed — nothing persists while test mode is on
@@ -1318,6 +1370,26 @@ function parseConnectionsScore(text){
   return { solved, mistakes: Math.min(mistakes, 4), points: solved ? (5 - mistakes) : 0 };
 }
 
+// Pulls out the little emoji grid(s) from a raw Wordle/Connections paste,
+// so we can show it back to the group instead of just the numeric score.
+// A paste can contain both games' grids, so this returns every contiguous
+// run of square-emoji lines it finds, in order.
+function extractEmojiBlocks(raw){
+  const lines = raw.split('\n').map(l => l.trim());
+  const blocks = [];
+  let current = [];
+  lines.forEach(line => {
+    if(line && SQUARE_LINE_RE.test(line)){
+      current.push(line);
+    }else if(current.length){
+      blocks.push(current.join('\n'));
+      current = [];
+    }
+  });
+  if(current.length) blocks.push(current.join('\n'));
+  return blocks;
+}
+
 async function bulkImport(){
   const raw = document.getElementById('f-bulk').value;
   const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
@@ -1380,19 +1452,44 @@ function renderSubmitStatus(){
     c.classList.toggle('selected', c.dataset.player === selectedSubmitter);
   });
 
-  renderTodayLeader(subsToday, finalized);
+  renderTodayResults(subsToday);
 }
 
-function renderTodayLeader(subsToday, finalized){
-  const valueEl = document.getElementById('today-leader-value');
+function renderTodayResults(subsToday){
+  const block = document.getElementById('today-results-block');
+  const body = document.getElementById('today-results-body');
   if(!subsToday || subsToday.length === 0){
-    valueEl.textContent = 'No scores submitted yet today.';
+    block.style.display = 'none';
+    body.innerHTML = '';
     return;
   }
-  const max = Math.max(...subsToday.map(s => s.totalPoints));
-  const leaders = subsToday.filter(s => s.totalPoints === max).map(s => s.player);
-  const tag = finalized ? ' (final)' : subsToday.length < state.players.length ? ` — ${subsToday.length}/${state.players.length} in so far` : '';
-  valueEl.textContent = `${leaders.join(' & ')} — ${max} pt${max===1?'':'s'}${tag}`;
+  block.style.display = 'block';
+
+  const sorted = [...subsToday].sort((a,b) => b.totalPoints - a.totalPoints);
+  const topScore = sorted[0].totalPoints;
+
+  body.innerHTML = sorted.map(s => {
+    const breakdownParts = [];
+    if(s.wordlePoints !== null && s.wordlePoints !== undefined){
+      breakdownParts.push(`Wordle: ${s.wordlePoints} pt${s.wordlePoints===1?'':'s'}`);
+    }
+    if(s.connectionsPoints !== null && s.connectionsPoints !== undefined){
+      breakdownParts.push(`Connections: ${s.connectionsPoints} pt${s.connectionsPoints===1?'':'s'}`);
+    }
+    const emojiBlocks = s.raw ? extractEmojiBlocks(s.raw) : [];
+    const emojiHtml = emojiBlocks.length
+      ? `<pre class="result-emoji">${emojiBlocks.join('\n\n')}</pre>`
+      : '';
+    return `
+      <div class="result-card ${s.totalPoints === topScore ? 'first-place' : ''}">
+        <div class="result-header">
+          <div class="result-name">${s.player}</div>
+          <div class="result-total">${s.totalPoints} pt${s.totalPoints===1?'':'s'}</div>
+        </div>
+        ${breakdownParts.length ? `<div class="result-breakdown">${breakdownParts.map(p => `<span>${p}</span>`).join('')}</div>` : ''}
+        ${emojiHtml}
+      </div>`;
+  }).join('');
 }
 
 function selectSubmitter(player){
