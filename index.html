@@ -815,10 +815,34 @@ async function save(){
   }
 }
 
+// Recomputes (replacing any existing) winner entry for a single date from
+// whatever's currently in state.submissions for that date. Called any time
+// a submission for a date changes — including after that date was already
+// "finalized" — so past scores can be added or corrected later and the
+// standings just pick up the new result instead of staying locked forever.
+function upsertEntryForDate(date){
+  state.entries = state.entries.filter(e => e.date !== date);
+  const subs = submissionsForDate(date);
+  if(subs.length === 0) return false;
+
+  const max = Math.max(...subs.map(s => s.totalPoints));
+  const winners = subs.filter(s => s.totalPoints === max).map(s => s.player);
+  state.entries.push({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    date,
+    players: winners,
+    points: max
+  });
+  return true;
+}
+
 // Ported from scripts/finalize.mjs — keep the two copies in sync.
 // A day finalizes once everyone has submitted, or once the day has passed
 // (that second case is a backstop the nightly Action also checks, in case
-// nobody opens the site the next day).
+// nobody opens the site the next day). finalizedDates is just used to show
+// the "winner calculated" note and to avoid the backstop re-running every
+// load — it is NOT a lock: submitScore can still add/update scores for a
+// finalized date any time, via upsertEntryForDate above.
 function finalizeCheck(){
   const today = todayISO();
   const dates = new Set(state.submissions.map(s => s.date));
@@ -834,16 +858,7 @@ function finalizeCheck(){
 
     state.finalizedDates.push(date);
     touched = true;
-    if(subs.length === 0) return;
-
-    const max = Math.max(...subs.map(s => s.totalPoints));
-    const winners = subs.filter(s => s.totalPoints === max).map(s => s.player);
-    state.entries.push({
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      date,
-      players: winners,
-      points: max
-    });
+    upsertEntryForDate(date);
   });
 
   return touched;
@@ -1372,7 +1387,7 @@ function renderSubmitStatus(){
   const finalized = (state.finalizedDates || []).includes(date);
   const lines = state.players.map(p => submittedNames.has(p) ? `<span class="done">✓ ${p}</span>` : `${p} — waiting`);
   const finalizedNote = finalized
-    ? `<br><br>${isToday ? "Today's" : "That day's"} winner has been calculated and logged.`
+    ? `<br><br>${isToday ? "Today's" : "That day's"} winner has been calculated. You can still add or update scores for this day — the winner will be recalculated.`
     : '';
   el.innerHTML = lines.join(' &nbsp;·&nbsp; ') + finalizedNote;
 
@@ -1502,10 +1517,6 @@ async function submitScore(){
   }
 
   const date = selectedSubmitDate;
-  if((state.finalizedDates || []).includes(date)){
-    showSubmitMsg('That day has already been finalized — use Bulk Import below to make corrections.');
-    return;
-  }
 
   const entry = {
     date,
@@ -1519,14 +1530,18 @@ async function submitScore(){
   const idx = state.submissions.findIndex(s => s.date === date && s.player === selectedSubmitter);
   if(idx >= 0) state.submissions[idx] = entry; else state.submissions.push(entry);
 
-  const touched = finalizeCheck();
+  // Past and present days both get their winner entry (re)computed here —
+  // scores can be entered or corrected for any date, even ones that were
+  // already finalized, and the standings just reflect the latest data.
+  markFinalized(date);
+  const winnerSet = upsertEntryForDate(date);
 
   renderSubmitStatus();
   render();
   if(!testMode) await save();
 
-  showSubmitMsg(touched
-    ? `Score submitted! ${date === todayISO() ? "Today's" : "That day's"} winner has been calculated.`
+  showSubmitMsg(winnerSet
+    ? `Score submitted! ${date === todayISO() ? "Today's" : "That day's"} winner has been recalculated.`
     : 'Score submitted!');
 }
 
