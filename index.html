@@ -690,7 +690,11 @@
 
   <div class="panel active" id="panel-submit">
     <div class="entry">
-      <div class="entry-title">Enter Today's Score</div>
+      <div class="entry-title">Submit a Score</div>
+      <div class="field">
+        <label for="f-submit-date">Date</label>
+        <input type="date" id="f-submit-date">
+      </div>
       <div class="submit-status" id="submit-status">Loading…</div>
       <div class="field">
         <label>Who are you?</label>
@@ -715,8 +719,26 @@
     </div>
 
     <div class="entry" id="today-results-block" style="display:none;">
-      <div class="entry-title">Today's Results</div>
+      <div class="entry-title" id="today-results-title">Today's Results</div>
       <div id="today-results-body"></div>
+    </div>
+
+    <div class="entry" id="bulk-block">
+      <div class="entry-title">Bulk Import</div>
+      <div class="hint" style="margin-bottom:10px;">Paste lines like: <code>7/13/26 Michaela (10 points)</code> or <code>6/29/26 Michaela, Thomas (8 pts)</code> — one per line.</div>
+      <div class="field">
+        <label for="f-bulk">Lines</label>
+        <textarea id="f-bulk" rows="6" style="width:100%; box-sizing:border-box; resize:vertical; font-family:'Source Serif 4', Georgia, serif; font-size:15px; padding:9px 8px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
+      </div>
+      <div class="add-row">
+        <button id="bulk-btn">Import lines</button>
+      </div>
+      <div class="msg" id="bulk-msg"></div>
+    </div>
+
+    <div class="history">
+      <div class="board-title">Recent Log</div>
+      <div class="history-list" id="history-body"><div class="loading">Loading log…</div></div>
     </div>
   </div>
 
@@ -736,60 +758,6 @@
   <div class="board">
     <div class="board-title">Trophy Case — Season Titles</div>
     <div id="trophy-body"><div class="loading">Loading trophy case…</div></div>
-  </div>
-
-  <div class="entry">
-    <div class="entry-title">Log Today's Result</div>
-    <div class="field">
-      <label for="f-date">Date</label>
-      <input type="date" id="f-date">
-    </div>
-    <div class="field">
-      <label>Winner(s)</label>
-      <div class="winner-picker" id="winner-picker"></div>
-      <div class="hint">Select more than one for a tie — you'll spin a wheel to pick the winner</div>
-    </div>
-    <div class="field">
-      <label for="f-points">Points</label>
-      <input type="number" id="f-points" placeholder="e.g. 1" step="1">
-    </div>
-    <div class="add-row">
-      <button id="add-btn">Add result</button>
-    </div>
-    <div class="msg" id="msg"></div>
-  </div>
-
-  <div class="wheel-overlay" id="wheel-overlay">
-    <div class="wheel-card">
-      <div class="wheel-title">Tiebreaker Spin</div>
-      <div class="wheel-stage">
-        <div class="wheel-pointer">▼</div>
-        <div class="wheel-disc" id="wheel-disc"></div>
-      </div>
-      <div class="wheel-result" id="wheel-result">&nbsp;</div>
-      <div class="wheel-actions">
-        <button class="secondary" id="wheel-cancel-btn">Cancel</button>
-        <button id="wheel-spin-btn">Spin the Wheel</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="entry" id="bulk-block">
-    <div class="entry-title">Bulk Import</div>
-    <div class="hint" style="margin-bottom:10px;">Paste lines like: <code>7/13/26 Michaela (10 points)</code> or <code>6/29/26 Michaela, Thomas (8 pts)</code> — one per line.</div>
-    <div class="field">
-      <label for="f-bulk">Lines</label>
-      <textarea id="f-bulk" rows="6" style="width:100%; box-sizing:border-box; resize:vertical; font-family:'Source Serif 4', Georgia, serif; font-size:15px; padding:9px 8px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
-    </div>
-    <div class="add-row">
-      <button id="bulk-btn">Import lines</button>
-    </div>
-    <div class="msg" id="bulk-msg"></div>
-  </div>
-
-  <div class="history">
-    <div class="board-title">Recent Log</div>
-    <div class="history-list" id="history-body"><div class="loading">Loading log…</div></div>
   </div>
 
   <div class="test-mode-banner" id="test-mode-banner">🧪 Test Mode is on — nothing you do right now will be saved</div>
@@ -840,10 +808,10 @@ async function save(){
       body: JSON.stringify(state)
     });
     if(!res.ok){
-      showMsg('Could not save — check your JSONBin config.');
+      showSubmitMsg('Could not save — check your JSONBin config.');
     }
   }catch(e){
-    showMsg('Could not save — try again.');
+    showSubmitMsg('Could not save — try again.');
   }
 }
 
@@ -882,11 +850,11 @@ function finalizeCheck(){
 }
 
 let state = { players: DEFAULT_PLAYERS.slice(), entries: [], submissions: [], finalizedDates: [] };
-let selectedWinners = [];
 let testMode = false;
 let realStateSnapshot = null;
 let selectedSubmitter = null;
 let selectedStatsPlayer = null;
+let selectedSubmitDate = todayISO();
 
 function todayISO(){
   const d = new Date();
@@ -976,7 +944,7 @@ function dayOfWeekFromISO(iso){
 
 async function load(){
   document.getElementById('today-label').textContent = fmtDateLabel();
-  document.getElementById('f-date').value = todayISO();
+  document.getElementById('f-submit-date').value = selectedSubmitDate;
 
   try{
     const res = await fetch(`${JSONBIN_URL}/latest`, {
@@ -1005,7 +973,6 @@ async function load(){
   const touched = finalizeCheck();
   if(touched) await save();
 
-  renderWinnerPicker();
   renderSubmitPicker();
   renderStatsPicker();
   render();
@@ -1033,9 +1000,7 @@ function exitTestMode(){
   realStateSnapshot = null;
   document.getElementById('test-mode-banner').style.display = 'none';
   document.getElementById('test-mode-btn').textContent = 'Enter Test Mode';
-  selectedWinners = [];
   selectedSubmitter = null;
-  renderWinnerPicker();
   renderSubmitPicker();
   renderStatsPicker();
   document.getElementById('submit-form-body').style.display = 'none';
@@ -1048,22 +1013,6 @@ function toggleTestMode(){
   }else{
     enterTestMode();
   }
-}
-
-function renderWinnerPicker(){
-  const el = document.getElementById('winner-picker');
-  el.innerHTML = state.players.map(p => `<div class="chip" data-player="${p}" onclick="toggleWinner('${p}')">${p}</div>`).join('');
-}
-
-function toggleWinner(p){
-  if(selectedWinners.includes(p)){
-    selectedWinners = selectedWinners.filter(x => x !== p);
-  }else{
-    selectedWinners.push(p);
-  }
-  document.querySelectorAll('.chip').forEach(c => {
-    c.classList.toggle('selected', selectedWinners.includes(c.dataset.player));
-  });
 }
 
 function rawTotals(entries){
@@ -1287,146 +1236,6 @@ function renderHistory(){
   `).join('');
 }
 
-function showMsg(text){
-  const m = document.getElementById('msg');
-  m.textContent = text;
-  setTimeout(() => { if(m.textContent === text) m.textContent = ''; }, 2500);
-}
-
-async function addEntry(){
-  const date = document.getElementById('f-date').value;
-  const points = document.getElementById('f-points').value;
-
-  if(!date || selectedWinners.length === 0 || points === ''){
-    showMsg('Add a date, at least one winner, and points.');
-    return;
-  }
-  const num = Number(points);
-  if(Number.isNaN(num)){
-    showMsg('Points must be a number.');
-    return;
-  }
-
-  if(selectedWinners.length > 1){
-    openWheelModal(selectedWinners, { date, points: num });
-    return;
-  }
-
-  const winners = [...selectedWinners];
-  state.entries.push({
-    id: Date.now(),
-    date, players: winners, points: num
-  });
-  markFinalized(date);
-
-  document.getElementById('f-points').value = '';
-  selectedWinners = [];
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
-
-  render();
-  if(!testMode) await save();
-  showMsg('Added.');
-}
-
-const WHEEL_COLORS = ['#b23a2e','#2e6f4e','#2e5f8a','#a9822f','#7a4f9e','#c96b2e'];
-let wheelMode = 'idle';
-let wheelNames = [];
-let wheelWinner = null;
-let wheelDraft = null;
-
-function openWheelModal(names, draft){
-  wheelNames = names.slice();
-  wheelDraft = draft;
-  wheelWinner = null;
-  wheelMode = 'idle';
-  document.getElementById('wheel-result').innerHTML = '&nbsp;';
-  const actionBtn = document.getElementById('wheel-spin-btn');
-  actionBtn.textContent = 'Spin the Wheel';
-  actionBtn.disabled = false;
-  buildWheelDisc(wheelNames);
-  document.getElementById('wheel-overlay').classList.add('open');
-}
-
-function closeWheelModal(){
-  document.getElementById('wheel-overlay').classList.remove('open');
-  wheelDraft = null;
-}
-
-function buildWheelDisc(names){
-  const disc = document.getElementById('wheel-disc');
-  disc.style.transition = 'none';
-  disc.style.transform = 'rotate(0deg)';
-  const n = names.length;
-  const slice = 360 / n;
-
-  const stops = names.map((_, i) => {
-    const color = WHEEL_COLORS[i % WHEEL_COLORS.length];
-    return `${color} ${i*slice}deg ${(i+1)*slice}deg`;
-  });
-  disc.style.background = `conic-gradient(${stops.join(', ')})`;
-
-  disc.innerHTML = '';
-  names.forEach((name, i) => {
-    const center = i*slice + slice/2;
-    const label = document.createElement('div');
-    label.className = 'wheel-label';
-    label.style.transform = `rotate(${center - 90}deg)`;
-    label.innerHTML = `<span>${name}</span>`;
-    disc.appendChild(label);
-  });
-
-  void disc.offsetWidth; // force reflow so the next transform change animates
-}
-
-function spinWheel(){
-  if(wheelMode === 'result'){
-    confirmWheelResult();
-    return;
-  }
-
-  const disc = document.getElementById('wheel-disc');
-  const n = wheelNames.length;
-  const slice = 360 / n;
-  const winnerIndex = Math.floor(Math.random() * n);
-  const centerAngle = winnerIndex * slice + slice / 2;
-  const jitter = (Math.random() - 0.5) * (slice * 0.6);
-  const extraSpins = 5 + Math.floor(Math.random() * 2);
-  const finalRotation = extraSpins * 360 + (360 - centerAngle - jitter);
-
-  document.getElementById('wheel-spin-btn').disabled = true;
-  disc.style.transition = 'transform 4.5s cubic-bezier(0.15, 0.65, 0.15, 1)';
-  disc.style.transform = `rotate(${finalRotation}deg)`;
-
-  wheelWinner = wheelNames[winnerIndex];
-
-  setTimeout(() => {
-    document.getElementById('wheel-result').textContent = `🎉 ${wheelWinner} wins the tiebreaker!`;
-    const actionBtn = document.getElementById('wheel-spin-btn');
-    actionBtn.textContent = 'Confirm & Log';
-    actionBtn.disabled = false;
-    wheelMode = 'result';
-  }, 4600);
-}
-
-async function confirmWheelResult(){
-  if(!wheelWinner || !wheelDraft) return;
-  state.entries.push({
-    id: Date.now(),
-    date: wheelDraft.date,
-    players: [wheelWinner],
-    points: wheelDraft.points
-  });
-  markFinalized(wheelDraft.date);
-  closeWheelModal();
-  render();
-  if(!testMode) await save();
-  showMsg(`Added — ${wheelWinner} won the tiebreaker.`);
-
-  selectedWinners = [];
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
-  document.getElementById('f-points').value = '';
-}
-
 async function removeEntry(id){
   state.entries = state.entries.filter(e => e.id !== id);
   render();
@@ -1515,7 +1324,6 @@ async function bulkImport(){
     added++;
   });
 
-  renderWinnerPicker();
   render();
   if(!testMode) await save();
 
@@ -1547,25 +1355,42 @@ function renderSubmitPicker(){
   renderSubmitStatus();
 }
 
+function changeSubmitDate(){
+  selectedSubmitDate = document.getElementById('f-submit-date').value || todayISO();
+  selectedSubmitter = null;
+  document.getElementById('submit-form-body').style.display = 'none';
+  document.querySelectorAll('#who-picker .chip').forEach(c => c.classList.remove('selected'));
+  renderSubmitStatus();
+}
+
 function renderSubmitStatus(){
   const el = document.getElementById('submit-status');
-  const today = todayISO();
-  const subsToday = submissionsForDate(today);
-  const submittedNames = new Set(subsToday.map(s => s.player));
-  const finalized = (state.finalizedDates || []).includes(today);
+  const date = selectedSubmitDate;
+  const isToday = date === todayISO();
+  const subsForDate = submissionsForDate(date);
+  const submittedNames = new Set(subsForDate.map(s => s.player));
+  const finalized = (state.finalizedDates || []).includes(date);
   const lines = state.players.map(p => submittedNames.has(p) ? `<span class="done">✓ ${p}</span>` : `${p} — waiting`);
-  el.innerHTML = lines.join(' &nbsp;·&nbsp; ') + (finalized ? '<br><br>Today\'s winner has been calculated and logged.' : '');
+  const finalizedNote = finalized
+    ? `<br><br>${isToday ? "Today's" : "That day's"} winner has been calculated and logged.`
+    : '';
+  el.innerHTML = lines.join(' &nbsp;·&nbsp; ') + finalizedNote;
 
   document.querySelectorAll('#who-picker .chip').forEach(c => {
     c.classList.toggle('selected', c.dataset.player === selectedSubmitter);
   });
 
-  renderTodayResults(subsToday);
+  renderTodayResults(subsForDate);
 }
 
 function renderTodayResults(subsToday){
   const block = document.getElementById('today-results-block');
   const body = document.getElementById('today-results-body');
+  const titleEl = document.getElementById('today-results-title');
+  if(titleEl){
+    const isToday = selectedSubmitDate === todayISO();
+    titleEl.textContent = isToday ? "Today's Results" : `Results — ${fmtShortDate(selectedSubmitDate)}`;
+  }
   if(!subsToday || subsToday.length === 0){
     block.style.display = 'none';
     body.innerHTML = '';
@@ -1607,9 +1432,9 @@ function selectSubmitter(player){
   });
   document.getElementById('submit-form-body').style.display = 'block';
 
-  // Pre-fill if this player already submitted today, so re-tapping their
-  // name lets them review/edit rather than starting blank.
-  const existing = submissionsForDate(todayISO()).find(s => s.player === player);
+  // Pre-fill if this player already submitted for the selected date, so
+  // re-tapping their name lets them review/edit rather than starting blank.
+  const existing = submissionsForDate(selectedSubmitDate).find(s => s.player === player);
   document.getElementById('f-submit-text').value = existing ? existing.raw || '' : '';
   document.getElementById('f-submit-points').value = existing && !existing.raw ? existing.totalPoints : '';
   updateSubmitPreview();
@@ -1676,9 +1501,9 @@ async function submitScore(){
     return;
   }
 
-  const date = todayISO();
+  const date = selectedSubmitDate;
   if((state.finalizedDates || []).includes(date)){
-    showSubmitMsg('Today has already been finalized — see the admin form to make changes.');
+    showSubmitMsg('That day has already been finalized — use Bulk Import below to make corrections.');
     return;
   }
 
@@ -1701,7 +1526,7 @@ async function submitScore(){
   if(!testMode) await save();
 
   showSubmitMsg(touched
-    ? "Score submitted! Today's winner has been calculated."
+    ? `Score submitted! ${date === todayISO() ? "Today's" : "That day's"} winner has been calculated.`
     : 'Score submitted!');
 }
 
@@ -1983,14 +1808,12 @@ function renderStatsBody(player){
   `;
 }
 
-document.getElementById('add-btn').addEventListener('click', addEntry);
 document.getElementById('bulk-btn').addEventListener('click', bulkImport);
-document.getElementById('wheel-cancel-btn').addEventListener('click', closeWheelModal);
-document.getElementById('wheel-spin-btn').addEventListener('click', spinWheel);
 document.getElementById('test-mode-btn').addEventListener('click', toggleTestMode);
 document.getElementById('submit-score-btn').addEventListener('click', submitScore);
 document.getElementById('f-submit-text').addEventListener('input', updateSubmitPreview);
 document.getElementById('f-submit-points').addEventListener('input', updateSubmitPreview);
+document.getElementById('f-submit-date').addEventListener('change', changeSubmitDate);
 
 load();
 </script>
