@@ -637,20 +637,6 @@
     </div>
   </div>
 
-  <div class="entry" id="calc-block">
-    <div class="entry-title">Score Calculator</div>
-    <div class="hint" style="margin-bottom:10px;">Paste your Wordle and/or Connections share text below (either or both at once).</div>
-    <div class="field">
-      <label for="f-calc">Paste Results</label>
-      <textarea id="f-calc" rows="8" style="width:100%; box-sizing:border-box; resize:vertical; font-family:'Roboto Mono', monospace; font-size:14px; padding:9px 8px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
-    </div>
-    <div class="add-row">
-      <button class="secondary" id="calc-clear-btn">Clear</button>
-      <button id="calc-btn">Calculate score</button>
-    </div>
-    <div id="calc-result"></div>
-  </div>
-
   <div class="entry" id="bulk-block">
     <div class="entry-title">Bulk Import</div>
     <div class="hint" style="margin-bottom:10px;">Paste lines like: <code>7/13/26 Michaela (10 points)</code> or <code>6/29/26 Michaela, Thomas (8 pts)</code> — one per line.</div>
@@ -1318,46 +1304,6 @@ function parseConnectionsScore(text){
   return { solved, mistakes: Math.min(mistakes, 4), points: solved ? (5 - mistakes) : 0 };
 }
 
-function runCalculator(){
-  const text = document.getElementById('f-calc').value;
-  const resultEl = document.getElementById('calc-result');
-
-  if(!text.trim()){
-    resultEl.innerHTML = `<div class="calc-error">Paste a Wordle and/or Connections result first.</div>`;
-    return;
-  }
-
-  const wordle = parseWordleScore(text);
-  const connections = parseConnectionsScore(text);
-
-  if(!wordle && !connections){
-    resultEl.innerHTML = `<div class="calc-error">Couldn't recognize a Wordle or Connections result in that text.</div>`;
-    return;
-  }
-
-  let total = 0;
-  let html = '';
-
-  if(wordle){
-    total += wordle.points;
-    const detail = wordle.solved ? `solved in ${wordle.guesses}/6` : `not solved (X/6)`;
-    html += `<div class="calc-line"><span>Wordle (${detail})</span><span>${wordle.points} pt${wordle.points===1?'':'s'}</span></div>`;
-  }
-  if(connections){
-    total += connections.points;
-    const detail = connections.solved ? `solved, ${connections.mistakes} mistake${connections.mistakes===1?'':'s'}` : `not solved`;
-    html += `<div class="calc-line"><span>Connections (${detail})</span><span>${connections.points} pt${connections.points===1?'':'s'}</span></div>`;
-  }
-  html += `<div class="calc-total"><span>Total</span><span>${total} pt${total===1?'':'s'}</span></div>`;
-
-  resultEl.innerHTML = html;
-}
-
-function clearCalculator(){
-  document.getElementById('f-calc').value = '';
-  document.getElementById('calc-result').innerHTML = '';
-}
-
 async function bulkImport(){
   const raw = document.getElementById('f-bulk').value;
   const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
@@ -1548,8 +1494,6 @@ function showSubmitMsg(text){
 
 document.getElementById('add-btn').addEventListener('click', addEntry);
 document.getElementById('bulk-btn').addEventListener('click', bulkImport);
-document.getElementById('calc-btn').addEventListener('click', runCalculator);
-document.getElementById('calc-clear-btn').addEventListener('click', clearCalculator);
 document.getElementById('wheel-cancel-btn').addEventListener('click', closeWheelModal);
 document.getElementById('wheel-spin-btn').addEventListener('click', spinWheel);
 document.getElementById('test-mode-btn').addEventListener('click', toggleTestMode);
