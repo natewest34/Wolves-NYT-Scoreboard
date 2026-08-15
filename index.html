@@ -354,7 +354,7 @@
     background:var(--ink);
     color:var(--paper);
   }
-  .tab:first-child{border-right:1px solid var(--ink);}
+  .tab:not(:last-child){border-right:1px solid var(--ink);}
   .panel{display:none;}
   .panel.active{display:block;}
 
@@ -588,6 +588,81 @@
     opacity:0.4;
     cursor:not-allowed;
   }
+
+  /* Stats tab */
+  .stats-empty{
+    font-family:'Roboto Mono', monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    padding:20px 4px;
+    text-align:center;
+  }
+  .stats-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:18px;
+  }
+  .stat-card{
+    border:1px solid var(--paper-line);
+    background:var(--paper-card);
+    padding:12px 14px;
+  }
+  .stat-card.wide{grid-column:1 / -1;}
+  .stat-label{
+    font-family:'Roboto Mono', monospace;
+    font-size:9px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-bottom:6px;
+  }
+  .stat-value{
+    font-family:'Roboto Mono', monospace;
+    font-size:22px;
+    font-weight:700;
+    line-height:1.1;
+  }
+  .stat-sub{
+    font-family:'Roboto Mono', monospace;
+    font-size:10.5px;
+    color:var(--ink-soft);
+    margin-top:4px;
+    line-height:1.5;
+  }
+  .dist-bars{
+    display:flex;
+    align-items:flex-end;
+    gap:6px;
+    height:80px;
+    margin-top:10px;
+  }
+  .dist-bar-col{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-end;
+    height:100%;
+  }
+  .dist-bar{
+    width:100%;
+    background:var(--gold);
+    min-height:2px;
+  }
+  .dist-bar-col.fail .dist-bar{ background:var(--red); }
+  .dist-count{
+    font-family:'Roboto Mono', monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+    margin-bottom:3px;
+  }
+  .dist-label{
+    font-family:'Roboto Mono', monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+    margin-top:5px;
+  }
 </style>
 </head>
 <body>
@@ -610,6 +685,7 @@
   <div class="tabs">
     <div class="tab active" data-tab="submit" onclick="switchTab('submit')">Submit Score</div>
     <div class="tab" data-tab="standings" onclick="switchTab('standings')">Standings</div>
+    <div class="tab" data-tab="stats" onclick="switchTab('stats')">Stats</div>
   </div>
 
   <div class="panel active" id="panel-submit">
@@ -724,6 +800,17 @@
 
   </div>
 
+  <div class="panel" id="panel-stats">
+    <div class="board" style="margin-top:0;">
+      <div class="board-title">Personal Stats</div>
+      <div class="field">
+        <label>Whose stats?</label>
+        <div class="who-picker" id="stats-picker"></div>
+      </div>
+      <div id="stats-body"><div class="stats-empty">Pick a name above to see their stats.</div></div>
+    </div>
+  </div>
+
   <footer>Tap an entry to remove it · Scores sync in the background via GitHub Actions</footer>
 </div>
 
@@ -739,6 +826,7 @@ const NICKNAMES = { 'nate': 'Nathan' };
 // (🟨🟩🟦🟪) share-text pastes, so we can pull the little grid back out
 // of someone's raw paste for display.
 const SQUARE_LINE_RE = /^[\u2B1B\u2B1C\u{1F7E5}-\u{1F7EB}\uFE0F]+$/u;
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 async function save(){
   if(testMode) return; // sandboxed — nothing persists while test mode is on
@@ -798,6 +886,7 @@ let selectedWinners = [];
 let testMode = false;
 let realStateSnapshot = null;
 let selectedSubmitter = null;
+let selectedStatsPlayer = null;
 
 function todayISO(){
   const d = new Date();
@@ -870,6 +959,21 @@ function daysRemainingInSeason(){
   return { totalDays, remaining };
 }
 
+// Days between two ISO ("YYYY-MM-DD") date strings, using UTC noon to
+// sidestep DST edge cases. b - a, in whole days.
+function daysBetweenISO(a, b){
+  const toUTC = (iso) => {
+    const [y,m,d] = iso.split('-').map(Number);
+    return Date.UTC(y, m-1, d);
+  };
+  return Math.round((toUTC(b) - toUTC(a)) / 86400000);
+}
+
+function dayOfWeekFromISO(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m-1, d)).getUTCDay();
+}
+
 async function load(){
   document.getElementById('today-label').textContent = fmtDateLabel();
   document.getElementById('f-date').value = todayISO();
@@ -903,6 +1007,7 @@ async function load(){
 
   renderWinnerPicker();
   renderSubmitPicker();
+  renderStatsPicker();
   render();
 }
 
@@ -932,6 +1037,7 @@ function exitTestMode(){
   selectedSubmitter = null;
   renderWinnerPicker();
   renderSubmitPicker();
+  renderStatsPicker();
   document.getElementById('submit-form-body').style.display = 'none';
   render();
 }
@@ -1078,6 +1184,7 @@ function render(){
   renderAllTimeBoard();
   renderTrophyCase();
   renderHistory();
+  if(selectedStatsPlayer) renderStatsBody(selectedStatsPlayer);
 }
 
 function renderRecord(){
@@ -1431,6 +1538,7 @@ function switchTab(name){
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.getElementById('panel-submit').classList.toggle('active', name === 'submit');
   document.getElementById('panel-standings').classList.toggle('active', name === 'standings');
+  document.getElementById('panel-stats').classList.toggle('active', name === 'stats');
 }
 
 function renderSubmitPicker(){
@@ -1601,6 +1709,278 @@ function showSubmitMsg(text){
   const m = document.getElementById('submit-msg');
   m.textContent = text;
   setTimeout(() => { if(m.textContent === text) m.textContent = ''; }, 2500);
+}
+
+// ---- Stats tab ----
+
+function renderStatsPicker(){
+  const el = document.getElementById('stats-picker');
+  el.innerHTML = state.players.map(p => `<div class="chip" data-player="${p}" onclick="selectStatsPlayer('${p}')">${p}</div>`).join('');
+}
+
+function selectStatsPlayer(player){
+  selectedStatsPlayer = player;
+  document.querySelectorAll('#stats-picker .chip').forEach(c => {
+    c.classList.toggle('selected', c.dataset.player === player);
+  });
+  renderStatsBody(player);
+}
+
+// Pulls every submission for a player, sorted oldest -> newest, and derives
+// solved/guesses/mistakes per game from the stored points fields. This
+// works whether the submission came from a pasted share (raw + points) or
+// a manual point entry (points only, so wordle/connections-specific fields
+// stay null and those games are simply skipped for game-specific stats).
+function playerSubmissions(player){
+  return state.submissions
+    .filter(s => s.player === player)
+    .slice()
+    .sort((a,b) => a.date.localeCompare(b.date));
+}
+
+function computePlayerStats(player){
+  const subs = playerSubmissions(player);
+
+  const wordleGames = subs
+    .filter(s => s.wordlePoints !== null && s.wordlePoints !== undefined)
+    .map(s => {
+      const solved = s.wordlePoints > 0;
+      return { date: s.date, solved, guesses: solved ? (7 - s.wordlePoints) : null };
+    });
+
+  const connectionsGames = subs
+    .filter(s => s.connectionsPoints !== null && s.connectionsPoints !== undefined)
+    .map(s => {
+      const solved = s.connectionsPoints > 0;
+      return { date: s.date, solved, mistakes: solved ? (5 - s.connectionsPoints) : 4 };
+    });
+
+  // Wordle guess distribution (1-6, plus fails)
+  const guessDist = [0,0,0,0,0,0]; // index 0 = 1 guess ... index 5 = 6 guesses
+  let wordleFails = 0;
+  wordleGames.forEach(g => {
+    if(g.solved) guessDist[g.guesses - 1]++;
+    else wordleFails++;
+  });
+  const wordleSolved = wordleGames.length - wordleFails;
+  const wordleSolveRate = wordleGames.length ? wordleSolved / wordleGames.length : null;
+  const wordleAvgGuesses = wordleSolved
+    ? wordleGames.filter(g => g.solved).reduce((sum,g) => sum + g.guesses, 0) / wordleSolved
+    : null;
+
+  // Connections
+  const connectionsPerfect = connectionsGames.filter(g => g.solved && g.mistakes === 0).length;
+  const connectionsPerfectRate = connectionsGames.length ? connectionsPerfect / connectionsGames.length : null;
+  const connectionsAvgMistakes = connectionsGames.length
+    ? connectionsGames.reduce((sum,g) => sum + g.mistakes, 0) / connectionsGames.length
+    : null;
+
+  // Best single day + average points (across all submissions, any type)
+  let bestDay = null;
+  let pointsSum = 0;
+  subs.forEach(s => {
+    pointsSum += s.totalPoints;
+    if(!bestDay || s.totalPoints > bestDay.totalPoints) bestDay = s;
+  });
+  const avgPoints = subs.length ? pointsSum / subs.length : null;
+
+  // Longest streaks: Wordle solves, Connections perfect solves, and days
+  // submitted on consecutive calendar days. A streak breaks the moment a
+  // date isn't exactly one day after the previous qualifying date.
+  function longestStreak(items, qualifies){
+    let longest = 0, current = 0, currentRun = 0, longestRun = 0;
+    let prevDate = null;
+    items.forEach(item => {
+      const ok = qualifies(item);
+      if(ok && prevDate !== null && daysBetweenISO(prevDate, item.date) === 1){
+        currentRun++;
+      }else if(ok){
+        currentRun = 1;
+      }else{
+        currentRun = 0;
+      }
+      if(ok){
+        longestRun = Math.max(longestRun, currentRun);
+        prevDate = item.date;
+      }else{
+        prevDate = null; // any non-qualifying day resets the chain entirely
+      }
+    });
+    return longestRun;
+  }
+  // Current streak = qualifying run ending on the player's most recent
+  // relevant submission (not necessarily today).
+  function currentStreak(items, qualifies){
+    let run = 0;
+    let prevDate = null;
+    for(let i = items.length - 1; i >= 0; i--){
+      const item = items[i];
+      if(!qualifies(item)) break;
+      if(prevDate === null || daysBetweenISO(item.date, prevDate) === 1){
+        run++;
+        prevDate = item.date;
+      }else{
+        break;
+      }
+    }
+    return run;
+  }
+
+  const wordleStreakLongest = longestStreak(wordleGames, g => g.solved);
+  const wordleStreakCurrent = currentStreak(wordleGames, g => g.solved);
+  const connectionsStreakLongest = longestStreak(connectionsGames, g => g.solved && g.mistakes === 0);
+  const connectionsStreakCurrent = currentStreak(connectionsGames, g => g.solved && g.mistakes === 0);
+
+  // Signature day: day of week with the best average points (min 2 games
+  // played that day so a single lucky Tuesday doesn't dominate).
+  const byDow = Array.from({length:7}, () => ({sum:0, count:0}));
+  subs.forEach(s => {
+    const dow = dayOfWeekFromISO(s.date);
+    byDow[dow].sum += s.totalPoints;
+    byDow[dow].count++;
+  });
+  let signatureDay = null;
+  byDow.forEach((d, i) => {
+    if(d.count >= 2){
+      const avg = d.sum / d.count;
+      if(!signatureDay || avg > signatureDay.avg){
+        signatureDay = { day: DAY_NAMES[i], avg, count: d.count };
+      }
+    }
+  });
+
+  // Current form: average of the last 7 submissions vs. career average.
+  const recentWindow = subs.slice(-7);
+  const recentAvg = recentWindow.length
+    ? recentWindow.reduce((sum,s) => sum + s.totalPoints, 0) / recentWindow.length
+    : null;
+  const formDelta = (recentAvg !== null && avgPoints !== null) ? recentAvg - avgPoints : null;
+
+  return {
+    player,
+    gamesPlayed: subs.length,
+    wordle: {
+      played: wordleGames.length,
+      guessDist,
+      fails: wordleFails,
+      solveRate: wordleSolveRate,
+      avgGuesses: wordleAvgGuesses,
+      streakLongest: wordleStreakLongest,
+      streakCurrent: wordleStreakCurrent
+    },
+    connections: {
+      played: connectionsGames.length,
+      perfectRate: connectionsPerfectRate,
+      avgMistakes: connectionsAvgMistakes,
+      streakLongest: connectionsStreakLongest,
+      streakCurrent: connectionsStreakCurrent
+    },
+    bestDay,
+    avgPoints,
+    signatureDay,
+    form: { recentAvg, careerAvg: avgPoints, delta: formDelta, window: recentWindow.length }
+  };
+}
+
+function pct(x){
+  return x === null ? '—' : `${Math.round(x * 100)}%`;
+}
+function num(x, digits){
+  return x === null ? '—' : x.toFixed(digits === undefined ? 1 : digits);
+}
+
+function renderStatsBody(player){
+  const body = document.getElementById('stats-body');
+  const s = computePlayerStats(player);
+
+  if(s.gamesPlayed === 0){
+    body.innerHTML = `<div class="stats-empty">${player} hasn't submitted any scores yet.</div>`;
+    return;
+  }
+
+  const distMax = Math.max(1, ...s.wordle.guessDist, s.wordle.fails);
+  const distBars = s.wordle.guessDist.map((count, i) => `
+    <div class="dist-bar-col">
+      <div class="dist-count">${count}</div>
+      <div class="dist-bar" style="height:${count ? (count/distMax*100) : 1}%"></div>
+      <div class="dist-label">${i+1}</div>
+    </div>`).join('') + `
+    <div class="dist-bar-col fail">
+      <div class="dist-count">${s.wordle.fails}</div>
+      <div class="dist-bar" style="height:${s.wordle.fails ? (s.wordle.fails/distMax*100) : 1}%"></div>
+      <div class="dist-label">X</div>
+    </div>`;
+
+  const formLine = s.form.delta === null
+    ? 'Not enough data yet'
+    : `${s.form.delta >= 0 ? '+' : ''}${s.form.delta.toFixed(1)} pts vs. career avg (${num(s.form.careerAvg)})`;
+
+  body.innerHTML = `
+    <div class="stat-card wide">
+      <div class="stat-label">Wordle Guess Distribution</div>
+      ${s.wordle.played ? `<div class="dist-bars">${distBars}</div>` : `<div class="stat-sub">No Wordle results submitted yet.</div>`}
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">Wordle Solve Rate</div>
+      <div class="stat-value">${pct(s.wordle.solveRate)}</div>
+      <div class="stat-sub">${s.wordle.played} played</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">Wordle Avg Guesses</div>
+      <div class="stat-value">${num(s.wordle.avgGuesses)}</div>
+      <div class="stat-sub">on solved days</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">Connections Perfect Rate</div>
+      <div class="stat-value">${pct(s.connections.perfectRate)}</div>
+      <div class="stat-sub">${s.connections.played} played</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">Connections Avg Mistakes</div>
+      <div class="stat-value">${num(s.connections.avgMistakes)}</div>
+      <div class="stat-sub">per puzzle</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">Longest Wordle Streak</div>
+      <div class="stat-value">${s.wordle.streakLongest}</div>
+      <div class="stat-sub">current: ${s.wordle.streakCurrent}</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">Longest Connections Streak</div>
+      <div class="stat-value">${s.connections.streakLongest}</div>
+      <div class="stat-sub">current: ${s.connections.streakCurrent}</div>
+    </div>
+
+    <div class="stat-card wide">
+      <div class="stat-label">Best Single Day</div>
+      <div class="stat-value">${s.bestDay ? `${s.bestDay.totalPoints} pts` : '—'}</div>
+      <div class="stat-sub">${s.bestDay ? fmtShortDate(s.bestDay.date) : ''}</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">Average Points</div>
+      <div class="stat-value">${num(s.avgPoints)}</div>
+      <div class="stat-sub">across ${s.gamesPlayed} day${s.gamesPlayed===1?'':'s'}</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">Signature Day</div>
+      <div class="stat-value">${s.signatureDay ? s.signatureDay.day : '—'}</div>
+      <div class="stat-sub">${s.signatureDay ? `${num(s.signatureDay.avg)} avg pts (${s.signatureDay.count} days)` : 'not enough data yet'}</div>
+    </div>
+
+    <div class="stat-card wide">
+      <div class="stat-label">Current Form</div>
+      <div class="stat-value">${s.form.recentAvg !== null ? num(s.form.recentAvg) : '—'}</div>
+      <div class="stat-sub">last ${s.form.window} day${s.form.window===1?'':'s'} · ${formLine}</div>
+    </div>
+  `;
 }
 
 document.getElementById('add-btn').addEventListener('click', addEntry);
