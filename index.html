@@ -702,6 +702,10 @@ const NICKNAMES = { 'nate': 'Nathan' };
 // (🟨🟩🟦🟪) share-text pastes, so we can pull the little grid back out
 // of someone's raw paste for display.
 const SQUARE_LINE_RE = /^[\u2B1B\u2B1C\u{1F7E5}-\u{1F7EB}\uFE0F]+$/u;
+// Counts square-emoji "tiles" in a row (optional variation selector after
+// each). Wordle rows are always 5 tiles wide; Connections rows are always
+// 4 tiles wide — used to tell the two kinds of blocks apart.
+const SQUARE_TOKEN_RE = /[\u2B1B\u2B1C\u{1F7E5}-\u{1F7EB}]\uFE0F?/gu;
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 async function save(){
@@ -1211,8 +1215,10 @@ function parseConnectionsScore(text){
 
 // Pulls out the little emoji grid(s) from a raw Wordle/Connections paste,
 // so we can show it back to the group instead of just the numeric score.
-// A paste can contain both games' grids, so this returns every contiguous
-// run of square-emoji lines it finds, in order.
+// A paste can contain both games' grids in either order (people paste
+// however they want) — this always returns Wordle before Connections,
+// regardless of which order they appear in the raw text, by classifying
+// each block on its row width (5 tiles = Wordle, 4 tiles = Connections).
 function extractEmojiBlocks(raw){
   const lines = raw.split('\n').map(l => l.trim());
   const blocks = [];
@@ -1226,7 +1232,22 @@ function extractEmojiBlocks(raw){
     }
   });
   if(current.length) blocks.push(current.join('\n'));
-  return blocks;
+
+  const ORDER = { wordle: 0, connections: 1, unknown: 2 };
+  return blocks
+    .map(block => ({ block, type: classifyEmojiBlock(block) }))
+    .sort((a, b) => ORDER[a.type] - ORDER[b.type]) // stable — ties keep original order
+    .map(entry => entry.block);
+}
+
+// A block is Wordle if its first row is 5 tiles wide, Connections if 4
+// tiles wide (matches the fixed grid widths of each game).
+function classifyEmojiBlock(block){
+  const firstLine = block.split('\n')[0] || '';
+  const tileCount = (firstLine.match(SQUARE_TOKEN_RE) || []).length;
+  if(tileCount === 5) return 'wordle';
+  if(tileCount === 4) return 'connections';
+  return 'unknown';
 }
 
 async function bulkImport(){
