@@ -687,7 +687,7 @@
     </div>
   </div>
 
-  <footer>Tap an entry to remove it · Scores sync in the background via GitHub Actions</footer>
+	<footer>Tap an entry to remove it · Yesterday's winner locks in when someone opens the app</footer>
 </div>
 
 <script src="config.js"></script>
@@ -749,10 +749,9 @@ function upsertEntryForDate(date){
   return true;
 }
 
-// Ported from scripts/finalize.mjs — keep the two copies in sync.
 // A day finalizes once everyone has submitted, or once the day has passed
-// (that second case is a backstop the nightly Action also checks, in case
-// nobody opens the site the next day). finalizedDates is just used to show
+// (that second case catches anyone who forgot to submit — the day locks
+// in as soon as someone next opens the site). finalizedDates is just used to show
 // the "winner calculated" note and to avoid the backstop re-running every
 // load — it is NOT a lock: submitScore can still add/update scores for a
 // finalized date any time, via upsertEntryForDate above.
@@ -897,7 +896,7 @@ async function load(){
   }
 
   // Catch up on any day that finished since the last time anyone opened the
-  // site (the nightly Action also does this, but this covers the gap too).
+  // site — this is the only place finalization happens now.  
   const touched = finalizeCheck();
   if(touched) await save();
 
