@@ -477,24 +477,10 @@
     letter-spacing:.05em;
   }
 
-  .test-mode-row{
+  .admin-row{
     margin-top:34px;
     display:flex;
     justify-content:center;
-  }
-  .test-mode-banner{
-    display:none;
-    position:sticky;
-    top:0;
-    z-index:50;
-    margin:20px -16px 0;
-    padding:10px 16px;
-    background:var(--red);
-    color:#fff;
-    font-family:'Roboto Mono', monospace;
-    font-size:11px;
-    letter-spacing:.04em;
-    text-align:center;
   }
 
   /* Stats tab */
@@ -648,6 +634,10 @@
       <div class="board-title">Recent Log</div>
       <div class="history-list" id="history-body"><div class="loading">Loading log…</div></div>
     </div>
+
+    <div class="admin-row">
+      <button class="secondary" id="admin-btn">Admin</button>
+    </div>
   </div>
 
   <div class="panel" id="panel-standings">
@@ -668,12 +658,6 @@
     <div id="trophy-body"><div class="loading">Loading trophy case…</div></div>
   </div>
 
-  <div class="test-mode-banner" id="test-mode-banner">🧪 Test Mode is on — nothing you do right now will be saved</div>
-
-  <div class="test-mode-row">
-    <button class="secondary" id="test-mode-btn">Enter Test Mode</button>
-  </div>
-
   </div>
 
   <div class="panel" id="panel-stats">
@@ -687,7 +671,7 @@
     </div>
   </div>
 
-	<footer>Tap an entry to remove it · Yesterday's winner locks in when someone opens the app</footer>
+	<footer>Tap an entry to remove it (Admin mode) · Yesterday's winner locks in when someone opens the app</footer>
 </div>
 
 <script src="config.js"></script>
@@ -709,7 +693,6 @@ const SQUARE_TOKEN_RE = /[\u2B1B\u2B1C\u{1F7E5}-\u{1F7EB}]\uFE0F?/gu;
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 async function save(){
-  if(testMode) return; // sandboxed — nothing persists while test mode is on
   try{
     const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
@@ -777,8 +760,7 @@ function finalizeCheck(){
 }
 
 let state = { players: DEFAULT_PLAYERS.slice(), entries: [], submissions: [], finalizedDates: [] };
-let testMode = false;
-let realStateSnapshot = null;
+let isAdmin = false;
 let selectedSubmitter = null;
 let selectedStatsPlayer = null;
 let selectedSubmitDate = todayISO();
@@ -914,32 +896,10 @@ function submissionsForDate(date){
   return state.submissions.filter(s => s.date === date);
 }
 
-function enterTestMode(){
-  realStateSnapshot = JSON.parse(JSON.stringify(state));
-  testMode = true;
-  document.getElementById('test-mode-banner').style.display = 'block';
-  document.getElementById('test-mode-btn').textContent = 'Exit Test Mode (discard changes)';
-}
-
-function exitTestMode(){
-  state = JSON.parse(JSON.stringify(realStateSnapshot));
-  testMode = false;
-  realStateSnapshot = null;
-  document.getElementById('test-mode-banner').style.display = 'none';
-  document.getElementById('test-mode-btn').textContent = 'Enter Test Mode';
-  selectedSubmitter = null;
-  renderSubmitPicker();
-  renderStatsPicker();
-  document.getElementById('submit-form-body').style.display = 'none';
-  render();
-}
-
-function toggleTestMode(){
-  if(testMode){
-    exitTestMode();
-  }else{
-    enterTestMode();
-  }
+function toggleAdmin(){
+  isAdmin = !isAdmin;
+  document.getElementById('admin-btn').textContent = isAdmin ? 'Exit Admin' : 'Admin';
+  renderHistory();
 }
 
 function rawTotals(entries){
@@ -1158,7 +1118,7 @@ function renderHistory(){
         <div>${e.players.join(' & ')}${e.players.length > 1 ? '<span class="tie-tag">TIE</span>' : ''}</div>
       </div>
       <div class="h-pts">+${e.points}</div>
-      <button class="danger" onclick="removeEntry(${e.id})">Remove</button>
+      ${isAdmin ? `<button class="danger" onclick="removeEntry(${e.id})">Remove</button>` : '<div></div>'}
     </div>
   `).join('');
 }
@@ -1166,7 +1126,7 @@ function renderHistory(){
 async function removeEntry(id){
   state.entries = state.entries.filter(e => e.id !== id);
   render();
-  if(!testMode) await save();
+  await save();
 }
 
 function parseWordleScore(text){
@@ -1269,7 +1229,7 @@ async function bulkImport(){
   });
 
   render();
-  if(!testMode) await save();
+  await save();
 
   if(errors.length){
     showBulkMsg(`Added ${added}. ${errors.length} line(s) skipped — check formatting.`);
@@ -1478,7 +1438,7 @@ async function submitScore(){
 
   renderSubmitStatus();
   render();
-  if(!testMode) await save();
+  await save();
 
   showSubmitMsg(winnerSet
     ? `Score submitted! ${date === todayISO() ? "Today's" : "That day's"} winner has been recalculated.`
@@ -1764,7 +1724,7 @@ function renderStatsBody(player){
 }
 
 document.getElementById('bulk-btn').addEventListener('click', bulkImport);
-document.getElementById('test-mode-btn').addEventListener('click', toggleTestMode);
+document.getElementById('admin-btn').addEventListener('click', toggleAdmin);
 document.getElementById('submit-score-btn').addEventListener('click', submitScore);
 document.getElementById('f-submit-text').addEventListener('input', updateSubmitPreview);
 document.getElementById('f-submit-points').addEventListener('input', updateSubmitPreview);
