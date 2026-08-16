@@ -497,98 +497,6 @@
     text-align:center;
   }
 
-  /* Tiebreaker wheel */
-  .wheel-overlay{
-    display:none;
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,0.55);
-    z-index:100;
-    align-items:center;
-    justify-content:center;
-    padding:20px;
-  }
-  .wheel-overlay.open{ display:flex; }
-  .wheel-card{
-    background:var(--paper-card);
-    border:1px solid var(--ink);
-    padding:22px;
-    max-width:340px;
-    width:100%;
-    text-align:center;
-  }
-  .wheel-title{
-    font-family:'Roboto Mono', monospace;
-    font-size:12px;
-    letter-spacing:.12em;
-    text-transform:uppercase;
-    color:var(--ink-soft);
-    margin-bottom:16px;
-  }
-  .wheel-stage{
-    position:relative;
-    width:240px;
-    height:240px;
-    margin:0 auto 16px;
-  }
-  .wheel-pointer{
-    position:absolute;
-    top:-6px;
-    left:50%;
-    transform:translateX(-50%);
-    font-size:22px;
-    color:var(--ink);
-    z-index:5;
-    line-height:1;
-  }
-  .wheel-disc{
-    width:100%;
-    height:100%;
-    border-radius:50%;
-    border:3px solid var(--ink);
-    position:relative;
-    transition:transform 4.5s cubic-bezier(0.15, 0.65, 0.15, 1);
-    transform:rotate(0deg);
-    overflow:hidden;
-  }
-  .wheel-label{
-    position:absolute;
-    top:50%;
-    left:50%;
-    width:50%;
-    height:2px;
-    transform-origin:0 50%;
-    display:flex;
-    align-items:center;
-    justify-content:flex-end;
-    padding-right:14px;
-  }
-  .wheel-label span{
-    font-family:'Roboto Mono', monospace;
-    font-size:12px;
-    font-weight:700;
-    color:#fff;
-    text-shadow:0 1px 2px rgba(0,0,0,0.5);
-    white-space:nowrap;
-  }
-  .wheel-result{
-    font-family:'Roboto Mono', monospace;
-    font-size:15px;
-    font-weight:700;
-    min-height:20px;
-    margin-bottom:16px;
-    color:var(--gold);
-  }
-  .wheel-actions{
-    display:flex;
-    justify-content:center;
-    gap:10px;
-  }
-  .wheel-actions button:disabled{
-    opacity:0.4;
-    cursor:not-allowed;
-  }
-
   /* Stats tab */
   .stats-empty{
     font-family:'Roboto Mono', monospace;
@@ -1530,11 +1438,22 @@ async function submitScore(){
   const idx = state.submissions.findIndex(s => s.date === date && s.player === selectedSubmitter);
   if(idx >= 0) state.submissions[idx] = entry; else state.submissions.push(entry);
 
-  // Past and present days both get their winner entry (re)computed here —
-  // scores can be entered or corrected for any date, even ones that were
-  // already finalized, and the standings just reflect the latest data.
-  markFinalized(date);
-  const winnerSet = upsertEntryForDate(date);
+  // Only lock in a winner once everyone in the group has submitted for this
+  // date, or the date has already passed (same gate finalizeCheck() uses).
+  // This was the bug: previously we finalized on every submission, so the
+  // first person in would immediately become the "winner" for the day.
+  // Past/already-finalized dates still get recalculated right away here,
+  // so late corrections to old scores keep working as before.
+  const subsForDate = submissionsForDate(date);
+  const isPast = date < todayISO();
+  const allIn = subsForDate.length >= state.players.length;
+  const readyToFinalize = isPast || allIn || (state.finalizedDates || []).includes(date);
+
+  let winnerSet = false;
+  if(readyToFinalize){
+    markFinalized(date);
+    winnerSet = upsertEntryForDate(date);
+  }
 
   renderSubmitStatus();
   render();
@@ -1542,7 +1461,7 @@ async function submitScore(){
 
   showSubmitMsg(winnerSet
     ? `Score submitted! ${date === todayISO() ? "Today's" : "That day's"} winner has been recalculated.`
-    : 'Score submitted!');
+    : 'Score submitted! Waiting on the rest of the group.');
 }
 
 function showSubmitMsg(text){
