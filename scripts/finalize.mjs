@@ -38,11 +38,12 @@ export function finalizeCheck(state) {
     if (subs.length === 0) continue; // nobody submitted that day
 
     const max = Math.max(...subs.map(s => s.totalPoints));
-    const winners = subs.filter(s => s.totalPoints === max).map(s => s.player);
+    const tied = subs.filter(s => s.totalPoints === max).map(s => s.player);
+    const winner = tied.length > 1 ? tied[Math.floor(Math.random() * tied.length)] : tied[0];
     state.entries.push({
       id: Date.now() + Math.floor(Math.random() * 1000),
       date,
-      players: winners,
+      players: [winner],
       points: max
     });
   }
