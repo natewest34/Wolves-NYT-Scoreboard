@@ -227,6 +227,13 @@
     margin-bottom:4px;
   }
   .field{margin-bottom:14px;}
+  .paste-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-bottom:14px;
+  }
+  .paste-grid .field{margin-bottom:0;}
   select, input[type=number], input[type=date], input[type=text]{
     width:100%;
     box-sizing:border-box;
@@ -477,10 +484,24 @@
     letter-spacing:.05em;
   }
 
-  .admin-row{
+  .test-mode-row{
     margin-top:34px;
     display:flex;
     justify-content:center;
+  }
+  .test-mode-banner{
+    display:none;
+    position:sticky;
+    top:0;
+    z-index:50;
+    margin:20px -16px 0;
+    padding:10px 16px;
+    background:var(--red);
+    color:#fff;
+    font-family:'Roboto Mono', monospace;
+    font-size:11px;
+    letter-spacing:.04em;
+    text-align:center;
   }
 
   /* Stats tab */
@@ -595,9 +616,15 @@
         <div class="who-picker" id="who-picker"></div>
       </div>
       <div id="submit-form-body" style="display:none;">
-        <div class="field">
-          <label for="f-submit-text">Paste your Wordle and/or Connections share text</label>
-          <textarea id="f-submit-text" rows="6" style="width:100%; box-sizing:border-box; resize:vertical; font-family:'Roboto Mono', monospace; font-size:14px; padding:9px 8px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
+        <div class="paste-grid">
+          <div class="field">
+            <label for="f-submit-wordle">Wordle</label>
+            <textarea id="f-submit-wordle" rows="6" placeholder="Paste your Wordle share text" style="width:100%; box-sizing:border-box; resize:vertical; font-family:'Roboto Mono', monospace; font-size:13px; padding:8px 6px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
+          </div>
+          <div class="field">
+            <label for="f-submit-connections">Connections</label>
+            <textarea id="f-submit-connections" rows="6" placeholder="Paste your Connections share text" style="width:100%; box-sizing:border-box; resize:vertical; font-family:'Roboto Mono', monospace; font-size:13px; padding:8px 6px; border:1px solid var(--ink); background:var(--paper); color:var(--ink);"></textarea>
+          </div>
         </div>
         <div class="hint" style="margin-bottom:10px;">Or skip pasting and just type your total points:</div>
         <div class="field">
@@ -634,10 +661,6 @@
       <div class="board-title">Recent Log</div>
       <div class="history-list" id="history-body"><div class="loading">Loading log…</div></div>
     </div>
-
-    <div class="admin-row">
-      <button class="secondary" id="admin-btn">Admin</button>
-    </div>
   </div>
 
   <div class="panel" id="panel-standings">
@@ -658,6 +681,12 @@
     <div id="trophy-body"><div class="loading">Loading trophy case…</div></div>
   </div>
 
+  <div class="test-mode-banner" id="test-mode-banner">🧪 Test Mode is on — nothing you do right now will be saved</div>
+
+  <div class="test-mode-row">
+    <button class="secondary" id="test-mode-btn">Enter Test Mode</button>
+  </div>
+
   </div>
 
   <div class="panel" id="panel-stats">
@@ -671,7 +700,7 @@
     </div>
   </div>
 
-	<footer>Tap an entry to remove it (Admin mode) · Yesterday's winner locks in when someone opens the app</footer>
+	<footer>Tap an entry to remove it · Yesterday's winner locks in when someone opens the app</footer>
 </div>
 
 <script src="config.js"></script>
@@ -693,6 +722,7 @@ const SQUARE_TOKEN_RE = /[\u2B1B\u2B1C\u{1F7E5}-\u{1F7EB}]\uFE0F?/gu;
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 async function save(){
+  if(testMode) return; // sandboxed — nothing persists while test mode is on
   try{
     const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
@@ -760,7 +790,8 @@ function finalizeCheck(){
 }
 
 let state = { players: DEFAULT_PLAYERS.slice(), entries: [], submissions: [], finalizedDates: [] };
-let isAdmin = false;
+let testMode = false;
+let realStateSnapshot = null;
 let selectedSubmitter = null;
 let selectedStatsPlayer = null;
 let selectedSubmitDate = todayISO();
@@ -896,10 +927,32 @@ function submissionsForDate(date){
   return state.submissions.filter(s => s.date === date);
 }
 
-function toggleAdmin(){
-  isAdmin = !isAdmin;
-  document.getElementById('admin-btn').textContent = isAdmin ? 'Exit Admin' : 'Admin';
-  renderHistory();
+function enterTestMode(){
+  realStateSnapshot = JSON.parse(JSON.stringify(state));
+  testMode = true;
+  document.getElementById('test-mode-banner').style.display = 'block';
+  document.getElementById('test-mode-btn').textContent = 'Exit Test Mode (discard changes)';
+}
+
+function exitTestMode(){
+  state = JSON.parse(JSON.stringify(realStateSnapshot));
+  testMode = false;
+  realStateSnapshot = null;
+  document.getElementById('test-mode-banner').style.display = 'none';
+  document.getElementById('test-mode-btn').textContent = 'Enter Test Mode';
+  selectedSubmitter = null;
+  renderSubmitPicker();
+  renderStatsPicker();
+  document.getElementById('submit-form-body').style.display = 'none';
+  render();
+}
+
+function toggleTestMode(){
+  if(testMode){
+    exitTestMode();
+  }else{
+    enterTestMode();
+  }
 }
 
 function rawTotals(entries){
@@ -1118,7 +1171,7 @@ function renderHistory(){
         <div>${e.players.join(' & ')}${e.players.length > 1 ? '<span class="tie-tag">TIE</span>' : ''}</div>
       </div>
       <div class="h-pts">+${e.points}</div>
-      ${isAdmin ? `<button class="danger" onclick="removeEntry(${e.id})">Remove</button>` : '<div></div>'}
+      <button class="danger" onclick="removeEntry(${e.id})">Remove</button>
     </div>
   `).join('');
 }
@@ -1126,7 +1179,7 @@ function renderHistory(){
 async function removeEntry(id){
   state.entries = state.entries.filter(e => e.id !== id);
   render();
-  await save();
+  if(!testMode) await save();
 }
 
 function parseWordleScore(text){
@@ -1229,7 +1282,7 @@ async function bulkImport(){
   });
 
   render();
-  await save();
+  if(!testMode) await save();
 
   if(errors.length){
     showBulkMsg(`Added ${added}. ${errors.length} line(s) skipped — check formatting.`);
@@ -1313,7 +1366,13 @@ function renderTodayResults(subsToday){
     if(s.connectionsPoints !== null && s.connectionsPoints !== undefined){
       breakdownParts.push(`Connections: ${s.connectionsPoints} pt${s.connectionsPoints===1?'':'s'}`);
     }
-    const emojiBlocks = s.raw ? extractEmojiBlocks(s.raw) : [];
+    // New submissions store rawWordle/rawConnections separately; fall back
+    // to the old combined "raw" field for submissions saved before the
+    // paste box was split, so old entries still show their emoji grid.
+    const combinedRaw = (s.rawWordle || s.rawConnections)
+      ? [s.rawWordle, s.rawConnections].filter(Boolean).join('\n')
+      : (s.raw || '');
+    const emojiBlocks = combinedRaw ? extractEmojiBlocks(combinedRaw) : [];
     const emojiHtml = emojiBlocks.length
       ? `<pre class="result-emoji">${emojiBlocks.join('\n\n')}</pre>`
       : '';
@@ -1339,23 +1398,34 @@ function selectSubmitter(player){
   // Pre-fill if this player already submitted for the selected date, so
   // re-tapping their name lets them review/edit rather than starting blank.
   const existing = submissionsForDate(selectedSubmitDate).find(s => s.player === player);
-  document.getElementById('f-submit-text').value = existing ? existing.raw || '' : '';
-  document.getElementById('f-submit-points').value = existing && !existing.raw ? existing.totalPoints : '';
+  // Old submissions (before the paste box was split) only have a combined
+  // "raw" field — drop that into the Wordle box on edit so it isn't lost.
+  const hasSplitRaw = existing && (existing.rawWordle || existing.rawConnections);
+  const legacyRaw = existing && !hasSplitRaw ? (existing.raw || '') : '';
+  document.getElementById('f-submit-wordle').value = existing ? (existing.rawWordle || legacyRaw) : '';
+  document.getElementById('f-submit-connections').value = existing ? (existing.rawConnections || '') : '';
+  document.getElementById('f-submit-points').value = existing && !hasSplitRaw && !legacyRaw ? existing.totalPoints : '';
   updateSubmitPreview();
 }
 
 function updateSubmitPreview(){
-  const text = document.getElementById('f-submit-text').value;
+  const wordleText = document.getElementById('f-submit-wordle').value;
+  const connectionsText = document.getElementById('f-submit-connections').value;
   const manualPoints = document.getElementById('f-submit-points').value;
   const previewEl = document.getElementById('submit-preview');
 
-  if(text.trim()){
-    const wordle = parseWordleScore(text);
-    const connections = parseConnectionsScore(text);
-    if(!wordle && !connections){
-      previewEl.innerHTML = `<div class="calc-error">Couldn't recognize a Wordle or Connections result in that text — you can type your points instead below.</div>`;
+  if(wordleText.trim() || connectionsText.trim()){
+    const wordle = wordleText.trim() ? parseWordleScore(wordleText) : null;
+    const connections = connectionsText.trim() ? parseConnectionsScore(connectionsText) : null;
+
+    const errors = [];
+    if(wordleText.trim() && !wordle) errors.push("Couldn't recognize a Wordle result in that box.");
+    if(connectionsText.trim() && !connections) errors.push("Couldn't recognize a Connections result in that box.");
+    if(errors.length){
+      previewEl.innerHTML = `<div class="calc-error">${errors.join(' ')} You can type your points instead below.</div>`;
       return;
     }
+
     let total = 0;
     let html = '';
     if(wordle){
@@ -1382,14 +1452,15 @@ async function submitScore(){
     showSubmitMsg('Tap your name first.');
     return;
   }
-  const text = document.getElementById('f-submit-text').value;
+  const wordleText = document.getElementById('f-submit-wordle').value;
+  const connectionsText = document.getElementById('f-submit-connections').value;
   const manualPoints = document.getElementById('f-submit-points').value;
 
   let wordle = null, connections = null, total = null;
-  if(text.trim()){
-    wordle = parseWordleScore(text);
-    connections = parseConnectionsScore(text);
-    if(!wordle && !connections){
+  if(wordleText.trim() || connectionsText.trim()){
+    wordle = wordleText.trim() ? parseWordleScore(wordleText) : null;
+    connections = connectionsText.trim() ? parseConnectionsScore(connectionsText) : null;
+    if((wordleText.trim() && !wordle) || (connectionsText.trim() && !connections)){
       showSubmitMsg('Could not read that paste — try typing your points instead.');
       return;
     }
@@ -1410,7 +1481,8 @@ async function submitScore(){
   const entry = {
     date,
     player: selectedSubmitter,
-    raw: text.trim() || null,
+    rawWordle: wordleText.trim() || null,
+    rawConnections: connectionsText.trim() || null,
     wordlePoints: wordle ? wordle.points : null,
     connectionsPoints: connections ? connections.points : null,
     totalPoints: total,
@@ -1438,7 +1510,7 @@ async function submitScore(){
 
   renderSubmitStatus();
   render();
-  await save();
+  if(!testMode) await save();
 
   showSubmitMsg(winnerSet
     ? `Score submitted! ${date === todayISO() ? "Today's" : "That day's"} winner has been recalculated.`
@@ -1724,9 +1796,10 @@ function renderStatsBody(player){
 }
 
 document.getElementById('bulk-btn').addEventListener('click', bulkImport);
-document.getElementById('admin-btn').addEventListener('click', toggleAdmin);
+document.getElementById('test-mode-btn').addEventListener('click', toggleTestMode);
 document.getElementById('submit-score-btn').addEventListener('click', submitScore);
-document.getElementById('f-submit-text').addEventListener('input', updateSubmitPreview);
+document.getElementById('f-submit-wordle').addEventListener('input', updateSubmitPreview);
+document.getElementById('f-submit-connections').addEventListener('input', updateSubmitPreview);
 document.getElementById('f-submit-points').addEventListener('input', updateSubmitPreview);
 document.getElementById('f-submit-date').addEventListener('change', changeSubmitDate);
 
