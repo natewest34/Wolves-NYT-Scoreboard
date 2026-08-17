@@ -721,9 +721,83 @@ const SQUARE_LINE_RE = /^[\u2B1B\u2B1C\u{1F7E5}-\u{1F7EB}\uFE0F]+$/u;
 const SQUARE_TOKEN_RE = /[\u2B1B\u2B1C\u{1F7E5}-\u{1F7EB}]\uFE0F?/gu;
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
+async function fetchRemoteState(){
+  try{
+    const res = await fetch(`${JSONBIN_URL}/latest`, {
+      headers: { 'X-Master-Key': JSONBIN_API_KEY }
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    return data.record || null;
+  }catch(e){
+    return null;
+  }
+}
+
+// Merges a freshly-fetched remote state into our local state right before
+// writing, so a save never blindly clobbers changes someone else made
+// between our last load and now. Returns the merged state plus the set of
+// dates whose submissions actually changed, so the caller can recompute
+// just those winners instead of re-rolling every date's tiebreak on every
+// save.
+function mergeState(base, remote){
+  if(!remote) return { state: base, changedDates: new Set() };
+
+  const merged = {
+    players: Array.from(new Set([...(base.players||[]), ...(remote.players||[])])),
+    submissions: [],
+    finalizedDates: Array.from(new Set([...(base.finalizedDates||[]), ...(remote.finalizedDates||[])])),
+    entries: []
+  };
+
+  const baseSubMap = new Map((base.submissions||[]).map(s => [`${s.date}|${s.player}`, s]));
+  const subMap = new Map();
+  [...(remote.submissions||[]), ...(base.submissions||[])].forEach(s => {
+    const key = `${s.date}|${s.player}`;
+    const existing = subMap.get(key);
+    if(!existing || new Date(s.submittedAt) >= new Date(existing.submittedAt)){
+      subMap.set(key, s);
+    }
+  });
+  merged.submissions = Array.from(subMap.values());
+
+  const changedDates = new Set();
+  subMap.forEach((s, key) => {
+    const baseS = baseSubMap.get(key);
+    if(!baseS || baseS.submittedAt !== s.submittedAt) changedDates.add(s.date);
+  });
+
+  // Entries: union by id (covers bulk-import entries, which have no
+  // backing submission and can't be recomputed from submissions below).
+  const entryMap = new Map();
+  [...(remote.entries||[]), ...(base.entries||[])].forEach(e => entryMap.set(e.id, e));
+  merged.entries = Array.from(entryMap.values());
+
+  return { state: merged, changedDates };
+}
+
+// Same finalize/recompute decision submitScore() and finalizeCheck() use,
+// pulled out so the merge step can apply it to just the dates a remote
+// change actually touched.
+function reconcileDate(date){
+  const subs = submissionsForDate(date);
+  const isPast = date < todayISO();
+  const allIn = subs.length > 0 && subs.length >= state.players.length;
+  const alreadyFinalized = (state.finalizedDates || []).includes(date);
+  if(alreadyFinalized || isPast || allIn){
+    markFinalized(date);
+    upsertEntryForDate(date);
+  }
+}
+
 async function save(){
   if(testMode) return; // sandboxed — nothing persists while test mode is on
   try{
+    const remote = await fetchRemoteState();
+    const { state: mergedState, changedDates } = mergeState(state, remote);
+    state = mergedState;
+    changedDates.forEach(reconcileDate);
+
     const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
       headers: {
@@ -734,7 +808,13 @@ async function save(){
     });
     if(!res.ok){
       showSubmitMsg('Could not save — check your JSONBin config.');
+      return;
     }
+    // Reflect the merged result immediately — remote may have had a
+    // submission or entry we didn't have locally.
+    renderSubmitPicker();
+    renderStatsPicker();
+    render();
   }catch(e){
     showSubmitMsg('Could not save — try again.');
   }
