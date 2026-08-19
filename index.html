@@ -724,8 +724,9 @@ async function fetchRemoteState(){
 // dates whose submissions actually changed, so the caller can recompute
 // just those winners instead of re-rolling every date's tiebreak on every
 // save.
-function mergeState(base, remote){
+function mergeState(base, remote, deletedEntryIds){
   if(!remote) return { state: base, changedDates: new Set() };
+  const deleted = new Set(deletedEntryIds || []);
 
   const merged = {
     players: Array.from(new Set([...(base.players||[]), ...(remote.players||[])])),
@@ -753,8 +754,14 @@ function mergeState(base, remote){
 
   // Entries: union by id (covers bulk-import entries, which have no
   // backing submission and can't be recomputed from submissions below).
+  // A plain union has no concept of deletion — if remote still has an id
+  // we just removed locally (e.g. via the admin Remove button), it would
+  // otherwise get merged straight back in. `deleted` is how the caller
+  // tells us "no, this id is gone on purpose" so it always wins, even if
+  // the remote copy hasn't caught up yet.
   const entryMap = new Map();
   [...(remote.entries||[]), ...(base.entries||[])].forEach(e => entryMap.set(e.id, e));
+  deleted.forEach(id => entryMap.delete(id));
   merged.entries = Array.from(entryMap.values());
 
   return { state: merged, changedDates };
@@ -774,10 +781,10 @@ function reconcileDate(date){
   }
 }
 
-async function save(){
+async function save(deletedEntryIds){
   try{
     const remote = await fetchRemoteState();
-    const { state: mergedState, changedDates } = mergeState(state, remote);
+    const { state: mergedState, changedDates } = mergeState(state, remote, deletedEntryIds);
     state = mergedState;
     changedDates.forEach(reconcileDate);
 
@@ -1219,7 +1226,9 @@ function renderHistory(){
 async function removeEntry(id){
   state.entries = state.entries.filter(e => e.id !== id);
   render();
-  await save();
+  // Tell save() this id was deleted on purpose, so the merge step doesn't
+  // pull it back in from whatever's still sitting on the remote copy.
+  await save([id]);
 }
 
 function parseWordleScore(text){
